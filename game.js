@@ -13,6 +13,10 @@ const BALL_RESPAWN_TIME = 3000; // milliseconds
 const MAX_INVENTORY = 3; // maximum number of balls a player can hold
 const THROW_SPEED = 400; // pixels per second
 const AIM_LINE_LENGTH = 50; // length of aiming line
+const KNOCKBACK_FORCE = 300; // knockback force when hit
+const KNOCKBACK_DURATION = 0.2; // knockback duration in seconds
+const INVINCIBILITY_DURATION = 1000; // invincibility period after being hit (milliseconds)
+const MAX_HEALTH = 3; // maximum health points
 
 // Players
 const player1 = {
@@ -30,7 +34,14 @@ const player1 = {
     lastCollectTime: 0, // to prevent rapid collection
     aiming: false, // whether player is currently aiming
     aimAngle: 0, // angle of aim in radians
-    aimSpeed: Math.PI / 2 // rotation speed in radians per second
+    aimSpeed: Math.PI / 2, // rotation speed in radians per second
+    health: MAX_HEALTH, // player health
+    isKnockedBack: false, // whether player is currently knocked back
+    knockbackTime: 0, // time remaining in knockback
+    knockbackVelocityX: 0, // knockback velocity X
+    knockbackVelocityY: 0, // knockback velocity Y
+    isInvincible: false, // whether player is currently invincible
+    invincibleEndTime: 0 // when invincibility ends
 };
 
 const player2 = {
@@ -48,7 +59,14 @@ const player2 = {
     lastCollectTime: 0, // to prevent rapid collection
     aiming: false, // whether player is currently aiming
     aimAngle: Math.PI, // angle of aim in radians (start aiming left)
-    aimSpeed: Math.PI / 2 // rotation speed in radians per second
+    aimSpeed: Math.PI / 2, // rotation speed in radians per second
+    health: MAX_HEALTH, // player health
+    isKnockedBack: false, // whether player is currently knocked back
+    knockbackTime: 0, // time remaining in knockback
+    knockbackVelocityX: 0, // knockback velocity X
+    knockbackVelocityY: 0, // knockback velocity Y
+    isInvincible: false, // whether player is currently invincible
+    invincibleEndTime: 0 // when invincibility ends
 };
 
 // Balls array
@@ -59,7 +77,9 @@ const thrownBalls = []; // Track balls that have been thrown
 const gameState = {
     running: true,
     lastTime: 0,
-    phase: 'Throwing Mechanics'
+    phase: 'Hit Detection',
+    gameOver: false,
+    winner: null
 };
 
 // Initialize the game
@@ -126,6 +146,11 @@ function setupControls() {
         // Aiming controls
         if (e.key === 'q') player1.aiming = true;
         if (e.key === '.') player2.aiming = true;
+        
+        // Restart game if game over
+        if (e.key === 'r' && gameState.gameOver) {
+            resetGame();
+        }
     });
     
     // Add event listeners for keyup
@@ -154,8 +179,45 @@ function setupControls() {
     });
 }
 
+// Reset the game
+function resetGame() {
+    // Reset player positions and states
+    player1.x = 200;
+    player1.y = 300;
+    player1.inventory = 0;
+    player1.health = MAX_HEALTH;
+    player1.isKnockedBack = false;
+    player1.isInvincible = false;
+    
+    player2.x = 600;
+    player2.y = 300;
+    player2.inventory = 0;
+    player2.health = MAX_HEALTH;
+    player2.isKnockedBack = false;
+    player2.isInvincible = false;
+    
+    // Clear thrown balls
+    thrownBalls.length = 0;
+    
+    // Reset game state
+    gameState.gameOver = false;
+    gameState.winner = null;
+    
+    // Reset collectible balls
+    balls.forEach(ball => {
+        ball.active = true;
+        ball.x = Math.random() * (GAME_WIDTH - BALL_SIZE * 2) + BALL_SIZE;
+        ball.y = Math.random() * (GAME_HEIGHT - BALL_SIZE * 2) + BALL_SIZE;
+    });
+}
+
 // Collect a ball if player is near one
 function collectBall(player) {
+    // Don't collect when knocked back
+    if (player.isKnockedBack) {
+        return;
+    }
+    
     // Check if player can hold more balls
     if (player.inventory >= MAX_INVENTORY) {
         return;
@@ -188,6 +250,11 @@ function collectBall(player) {
 
 // Throw a ball in the direction the player is aiming
 function throwBall(player) {
+    // Don't throw when knocked back
+    if (player.isKnockedBack) {
+        return;
+    }
+    
     // Check if player has balls to throw
     if (player.inventory <= 0) {
         return;
@@ -228,6 +295,35 @@ function respawnBall(index) {
     }
 }
 
+// Apply knockback to a player when hit
+function applyKnockback(player, ball) {
+    // Calculate knockback direction (normalized vector from ball to player)
+    const dx = player.x - ball.x;
+    const dy = player.y - ball.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Apply knockback velocity
+    player.knockbackVelocityX = (dx / distance) * KNOCKBACK_FORCE;
+    player.knockbackVelocityY = (dy / distance) * KNOCKBACK_FORCE;
+    
+    // Set knockback state
+    player.isKnockedBack = true;
+    player.knockbackTime = KNOCKBACK_DURATION;
+    
+    // Apply invincibility
+    player.isInvincible = true;
+    player.invincibleEndTime = Date.now() + INVINCIBILITY_DURATION;
+    
+    // Reduce health
+    player.health--;
+    
+    // Check if player is defeated
+    if (player.health <= 0) {
+        gameState.gameOver = true;
+        gameState.winner = player === player1 ? 2 : 1;
+    }
+}
+
 // Main game loop
 function gameLoop(timestamp) {
     // Calculate delta time (time since last frame)
@@ -240,8 +336,10 @@ function gameLoop(timestamp) {
     // Clear the canvas
     ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     
-    // Update game logic
-    update(deltaSeconds);
+    // Update game logic if not game over
+    if (!gameState.gameOver) {
+        update(deltaSeconds);
+    }
     
     // Render game objects
     render();
@@ -265,22 +363,54 @@ function update(deltaTime) {
     
     // Update thrown balls
     updateThrownBalls(deltaTime);
+    
+    // Update invincibility state
+    updateInvincibility();
 }
 
 // Update player position based on movement flags
 function updatePlayerPosition(player, deltaTime) {
-    // Calculate movement based on player speed and delta time
-    const moveDistance = player.speed * deltaTime;
-    
-    // Update position based on movement flags
-    if (player.moveUp) player.y -= moveDistance;
-    if (player.moveDown) player.y += moveDistance;
-    if (player.moveLeft) player.x -= moveDistance;
-    if (player.moveRight) player.x += moveDistance;
+    if (player.isKnockedBack) {
+        // Update knockback physics
+        player.x += player.knockbackVelocityX * deltaTime;
+        player.y += player.knockbackVelocityY * deltaTime;
+        
+        // Reduce knockback time
+        player.knockbackTime -= deltaTime;
+        
+        // End knockback if time is up
+        if (player.knockbackTime <= 0) {
+            player.isKnockedBack = false;
+        }
+    } else {
+        // Calculate movement based on player speed and delta time
+        const moveDistance = player.speed * deltaTime;
+        
+        // Update position based on movement flags
+        if (player.moveUp) player.y -= moveDistance;
+        if (player.moveDown) player.y += moveDistance;
+        if (player.moveLeft) player.x -= moveDistance;
+        if (player.moveRight) player.x += moveDistance;
+    }
     
     // Apply boundary constraints
     player.x = Math.max(player.width / 2, Math.min(GAME_WIDTH - player.width / 2, player.x));
     player.y = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, player.y));
+}
+
+// Update invincibility state for both players
+function updateInvincibility() {
+    const currentTime = Date.now();
+    
+    // Update player 1 invincibility
+    if (player1.isInvincible && currentTime >= player1.invincibleEndTime) {
+        player1.isInvincible = false;
+    }
+    
+    // Update player 2 invincibility
+    if (player2.isInvincible && currentTime >= player2.invincibleEndTime) {
+        player2.isInvincible = false;
+    }
 }
 
 // Update aiming angles for players who are aiming
@@ -300,7 +430,7 @@ function updateAimingAngles(deltaTime) {
     }
 }
 
-// Update thrown balls (move them and check for wall collisions)
+// Update thrown balls (move them and check for collisions)
 function updateThrownBalls(deltaTime) {
     for (let i = thrownBalls.length - 1; i >= 0; i--) {
         const ball = thrownBalls[i];
@@ -312,14 +442,31 @@ function updateThrownBalls(deltaTime) {
         // Check for wall collisions
         // Left or right wall
         if (ball.x - ball.radius < 0 || ball.x + ball.radius > GAME_WIDTH) {
-            // Remove the ball when it hits a wall for now
+            // Remove the ball when it hits a wall
             thrownBalls.splice(i, 1);
             continue;
         }
         
         // Top or bottom wall
         if (ball.y - ball.radius < 0 || ball.y + ball.radius > GAME_HEIGHT) {
-            // Remove the ball when it hits a wall for now
+            // Remove the ball when it hits a wall
+            thrownBalls.splice(i, 1);
+            continue;
+        }
+        
+        // Check for player collisions (only if ball is not owned by this player)
+        // Check collision with player 1 (if ball was thrown by player 2)
+        if (ball.owner === 2 && !player1.isInvincible && isColliding(player1, ball)) {
+            // Apply knockback and remove the ball
+            applyKnockback(player1, ball);
+            thrownBalls.splice(i, 1);
+            continue;
+        }
+        
+        // Check collision with player 2 (if ball was thrown by player 1)
+        if (ball.owner === 1 && !player2.isInvincible && isColliding(player2, ball)) {
+            // Apply knockback and remove the ball
+            applyKnockback(player2, ball);
             thrownBalls.splice(i, 1);
             continue;
         }
@@ -359,6 +506,14 @@ function render() {
     
     // Draw game info
     drawGameInfo();
+    
+    // Draw health bars
+    drawHealthBars();
+    
+    // Draw game over message if game is over
+    if (gameState.gameOver) {
+        drawGameOver();
+    }
 }
 
 // Draw all collectible balls
@@ -421,8 +576,14 @@ function drawAimLine(player) {
 
 // Draw a player
 function drawPlayer(player) {
+    // Set player color (flash white if invincible)
+    if (player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) {
+        ctx.fillStyle = 'white';
+    } else {
+        ctx.fillStyle = player.color;
+    }
+    
     // Draw player rectangle
-    ctx.fillStyle = player.color;
     ctx.fillRect(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
     
     // Draw inventory indicators
@@ -453,6 +614,68 @@ function drawInventory(player) {
     }
 }
 
+// Draw health bars for both players
+function drawHealthBars() {
+    const barWidth = 100;
+    const barHeight = 15;
+    const padding = 10;
+    
+    // Draw player 1 health bar (left side)
+    drawHealthBar(padding, padding, barWidth, barHeight, player1.health, MAX_HEALTH, 'red');
+    
+    // Draw player 2 health bar (right side)
+    drawHealthBar(GAME_WIDTH - padding - barWidth, padding, barWidth, barHeight, player2.health, MAX_HEALTH, 'blue');
+}
+
+// Draw a health bar
+function drawHealthBar(x, y, width, height, currentHealth, maxHealth, color) {
+    // Draw background
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, y, width, height);
+    
+    // Draw health
+    const healthWidth = (currentHealth / maxHealth) * width;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, healthWidth, height);
+    
+    // Draw border
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Draw health text
+    ctx.fillStyle = 'white';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${currentHealth}/${maxHealth}`, x + width / 2, y + height / 2 + 4);
+}
+
+// Draw game over message
+function drawGameOver() {
+    // Draw semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw game over text
+    ctx.fillStyle = 'white';
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
+    
+    // Draw winner text
+    if (gameState.winner) {
+        ctx.font = '36px Arial';
+        const winnerColor = gameState.winner === 1 ? 'red' : 'blue';
+        ctx.fillStyle = winnerColor;
+        ctx.fillText(`Player ${gameState.winner} wins!`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+    }
+    
+    // Draw restart instructions
+    ctx.fillStyle = 'white';
+    ctx.font = '24px Arial';
+    ctx.fillText('Press R to restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
+}
+
 // Draw game information
 function drawGameInfo() {
     // Draw game title
@@ -463,17 +686,13 @@ function drawGameInfo() {
     
     // Draw phase info
     ctx.font = '16px Arial';
-    ctx.fillText(`Phase 5: ${gameState.phase}`, GAME_WIDTH / 2, 60);
+    ctx.fillText(`Phase 6: ${gameState.phase}`, GAME_WIDTH / 2, 60);
     
-    // Draw controls info
-    ctx.textAlign = 'left';
+    // Draw controls info (smaller text at the bottom)
+    ctx.textAlign = 'center';
     ctx.font = '12px Arial';
-    ctx.fillText('Player 1: WASD to move', 10, 30);
-    ctx.fillText('E to collect, Q to aim/throw', 10, 45);
-    
-    ctx.textAlign = 'right';
-    ctx.fillText('Player 2: Arrow keys to move', GAME_WIDTH - 10, 30);
-    ctx.fillText('/ to collect, . to aim/throw', GAME_WIDTH - 10, 45);
+    ctx.fillText('Player 1: WASD to move, E to collect, Q to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 25);
+    ctx.fillText('Player 2: Arrow keys to move, / to collect, . to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 10);
 }
 
 // Initialize the game when the page loads
