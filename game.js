@@ -7,6 +7,8 @@ const GAME_WIDTH = canvas.width;
 const GAME_HEIGHT = canvas.height;
 const PLAYER_SIZE = 30;
 const PLAYER_SPEED = 200; // pixels per second
+const BALL_SIZE = 15;
+const BALL_COUNT = 10;
 
 // Players
 const player1 = {
@@ -35,11 +37,14 @@ const player2 = {
     moveRight: false
 };
 
+// Balls array
+const balls = [];
+
 // Game state object
 const gameState = {
     running: true,
     lastTime: 0,
-    phase: 'Player Basics'
+    phase: 'Ball Implementation'
 };
 
 // Initialize the game
@@ -47,8 +52,38 @@ function init() {
     // Set up keyboard controls
     setupControls();
     
+    // Create initial balls
+    createBalls();
+    
     // Start the game loop
     requestAnimationFrame(gameLoop);
+}
+
+// Create balls at random positions
+function createBalls() {
+    for (let i = 0; i < BALL_COUNT; i++) {
+        createBall();
+    }
+}
+
+// Create a single ball at a random position
+function createBall() {
+    // Create a new ball at a random position
+    const ball = {
+        x: Math.random() * (GAME_WIDTH - BALL_SIZE * 2) + BALL_SIZE,
+        y: Math.random() * (GAME_HEIGHT - BALL_SIZE * 2) + BALL_SIZE,
+        radius: BALL_SIZE / 2,
+        color: getRandomBallColor()
+    };
+    
+    // Add the ball to the balls array
+    balls.push(ball);
+}
+
+// Generate a random color for balls
+function getRandomBallColor() {
+    const colors = ['yellow', 'green', 'orange', 'purple', 'cyan'];
+    return colors[Math.floor(Math.random() * colors.length)];
 }
 
 // Set up keyboard controls
@@ -115,6 +150,9 @@ function update(deltaTime) {
     
     // Update player 2 position
     updatePlayerPosition(player2, deltaTime);
+    
+    // Check player-ball collisions
+    checkBallCollisions();
 }
 
 // Update player position based on movement flags
@@ -133,14 +171,69 @@ function updatePlayerPosition(player, deltaTime) {
     player.y = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, player.y));
 }
 
+// Check for collisions between players and balls
+function checkBallCollisions() {
+    // In this phase, we just detect collisions but don't do anything with them yet
+    // We'll add collection functionality in the next phase
+    
+    for (let i = 0; i < balls.length; i++) {
+        const ball = balls[i];
+        
+        // Check collision with player 1
+        if (isColliding(player1, ball)) {
+            // Log collision with player 1 (for testing)
+            console.log('Player 1 collided with ball', i);
+        }
+        
+        // Check collision with player 2
+        if (isColliding(player2, ball)) {
+            // Log collision with player 2 (for testing)
+            console.log('Player 2 collided with ball', i);
+        }
+    }
+}
+
+// Check if a player and a ball are colliding
+function isColliding(player, ball) {
+    // Calculate the closest point on the player's box to the ball's center
+    const closestX = Math.max(player.x - player.width / 2, Math.min(ball.x, player.x + player.width / 2));
+    const closestY = Math.max(player.y - player.height / 2, Math.min(ball.y, player.y + player.height / 2));
+    
+    // Calculate the distance between the closest point and the ball's center
+    const distanceX = closestX - ball.x;
+    const distanceY = closestY - ball.y;
+    const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+    
+    // Return true if the distance is less than the ball's radius (squared)
+    return distanceSquared <= ball.radius * ball.radius;
+}
+
 // Render game objects
 function render() {
+    // Draw balls
+    drawBalls();
+    
     // Draw players
     drawPlayer(player1);
     drawPlayer(player2);
     
     // Draw game info
     drawGameInfo();
+}
+
+// Draw all balls
+function drawBalls() {
+    for (const ball of balls) {
+        drawBall(ball);
+    }
+}
+
+// Draw a single ball
+function drawBall(ball) {
+    ctx.fillStyle = ball.color;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 // Draw a player
@@ -159,7 +252,7 @@ function drawGameInfo() {
     
     // Draw phase info
     ctx.font = '16px Arial';
-    ctx.fillText(`Phase 2: ${gameState.phase}`, GAME_WIDTH / 2, 60);
+    ctx.fillText(`Phase 3: ${gameState.phase}`, GAME_WIDTH / 2, 60);
     
     // Draw controls info
     ctx.font = '14px Arial';
