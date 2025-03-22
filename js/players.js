@@ -173,8 +173,8 @@ function applyKnockback(player, ball) {
     
     // Check if player is defeated
     if (player.health <= 0) {
-        gameState.gameOver = true;
-        gameState.winner = player === player1 ? 2 : 1;
+        // End the round with the other player as winner
+        endRound(player === player1 ? 2 : 1);
     }
 }
 

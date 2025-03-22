@@ -4,6 +4,33 @@
 function setupControls() {
     // Add event listeners for keydown
     window.addEventListener('keydown', function(e) {
+        // Game state controls
+        if (e.key === 'Enter') {
+            // Start game or next round
+            if (gameState.status === GAME_STATE.START || gameState.status === GAME_STATE.ROUND_OVER) {
+                startRound();
+            } else if (gameState.status === GAME_STATE.MATCH_OVER) {
+                resetMatch();
+            }
+        }
+        
+        if (e.key === 'p' || e.key === 'P') {
+            // Toggle pause
+            if (gameState.status === GAME_STATE.PLAYING || gameState.status === GAME_STATE.PAUSED) {
+                togglePause();
+            }
+        }
+        
+        if (e.key === 'r' || e.key === 'R') {
+            // Reset match
+            if (gameState.status === GAME_STATE.MATCH_OVER) {
+                resetMatch();
+            }
+        }
+        
+        // Only process gameplay controls if the game is in playing state
+        if (gameState.status !== GAME_STATE.PLAYING) return;
+        
         // Player 1 controls (WASD)
         if (e.key === 'w') player1.moveUp = true;
         if (e.key === 's') player1.moveDown = true;
@@ -23,15 +50,13 @@ function setupControls() {
         // Aiming controls
         if (e.key === 'q') player1.aiming = true;
         if (e.key === '.') player2.aiming = true;
-        
-        // Restart game if game over
-        if (e.key === 'r' && gameState.gameOver) {
-            resetGame();
-        }
     });
     
     // Add event listeners for keyup
     window.addEventListener('keyup', function(e) {
+        // Only process gameplay controls if the game is in playing state
+        if (gameState.status !== GAME_STATE.PLAYING) return;
+        
         // Player 1 controls (WASD)
         if (e.key === 'w') player1.moveUp = false;
         if (e.key === 's') player1.moveDown = false;

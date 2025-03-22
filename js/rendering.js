@@ -15,9 +15,11 @@ function render() {
     drawPlayer(player1);
     drawPlayer(player2);
     
-    // Draw aiming lines if players are aiming
-    if (player1.aiming) drawAimLine(player1);
-    if (player2.aiming) drawAimLine(player2);
+    // Draw aiming lines if players are aiming (only in playing state)
+    if (gameState.status === GAME_STATE.PLAYING) {
+        if (player1.aiming) drawAimLine(player1);
+        if (player2.aiming) drawAimLine(player2);
+    }
     
     // Draw game info
     drawGameInfo();
@@ -25,9 +27,26 @@ function render() {
     // Draw health bars
     drawHealthBars();
     
-    // Draw game over message if game is over
-    if (gameState.gameOver) {
-        drawGameOver();
+    // Draw score board
+    drawScoreboard();
+    
+    // Draw round timer
+    drawRoundTimer();
+    
+    // Draw state-specific overlays
+    switch (gameState.status) {
+        case GAME_STATE.START:
+            drawStartScreen();
+            break;
+        case GAME_STATE.PAUSED:
+            drawPauseScreen();
+            break;
+        case GAME_STATE.ROUND_OVER:
+            drawRoundOverScreen();
+            break;
+        case GAME_STATE.MATCH_OVER:
+            drawMatchOverScreen();
+            break;
     }
 }
 
@@ -227,30 +246,169 @@ function drawHealthBar(x, y, width, height, currentHealth, maxHealth, color) {
     ctx.fillText(`${currentHealth}/${maxHealth}`, x + width / 2, y + height / 2 + 4);
 }
 
-// Draw game over message
-function drawGameOver() {
+// Draw scoreboard
+function drawScoreboard() {
+    const scoreboardWidth = 200;
+    const scoreboardHeight = 50;
+    const x = GAME_WIDTH / 2 - scoreboardWidth / 2;
+    const y = 80;
+    
+    // Draw background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y, scoreboardWidth, scoreboardHeight);
+    
+    // Draw border
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, scoreboardWidth, scoreboardHeight);
+    
+    // Draw scores
+    ctx.font = '24px Arial';
+    ctx.textAlign = 'center';
+    
+    // Player 1 score
+    ctx.fillStyle = 'red';
+    ctx.fillText(gameState.scores.player1.toString(), x + scoreboardWidth / 4, y + 35);
+    
+    // Vs text
+    ctx.fillStyle = 'white';
+    ctx.fillText('VS', x + scoreboardWidth / 2, y + 35);
+    
+    // Player 2 score
+    ctx.fillStyle = 'blue';
+    ctx.fillText(gameState.scores.player2.toString(), x + scoreboardWidth * 3 / 4, y + 35);
+    
+    // Draw round number
+    ctx.fillStyle = 'white';
+    ctx.font = '16px Arial';
+    ctx.fillText(`Round ${gameState.roundNumber}`, x + scoreboardWidth / 2, y + 15);
+}
+
+// Draw round timer
+function drawRoundTimer() {
+    // Only show timer during active gameplay
+    if (gameState.status !== GAME_STATE.PLAYING && gameState.status !== GAME_STATE.PAUSED) {
+        return;
+    }
+    
+    const timerWidth = 80;
+    const timerHeight = 30;
+    const x = GAME_WIDTH / 2 - timerWidth / 2;
+    const y = 140;
+    
+    // Draw background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y, timerWidth, timerHeight);
+    
+    // Draw border
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, timerWidth, timerHeight);
+    
+    // Format time as MM:SS
+    const minutes = Math.floor(Math.max(0, gameState.roundTimer) / 60);
+    const seconds = Math.floor(Math.max(0, gameState.roundTimer) % 60);
+    const timeStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+    
+    // Draw time
+    ctx.fillStyle = gameState.roundTimer <= 10 ? 'red' : 'white'; // Red when <= a10 seconds
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(timeStr, x + timerWidth / 2, y + 22);
+}
+
+// Draw start screen
+function drawStartScreen() {
     // Draw semi-transparent overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     
-    // Draw game over text
+    // Draw title
+    ctx.fillStyle = 'white';
+    ctx.font = '64px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BALLBRAWL', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60);
+    
+    // Draw subtitle
+    ctx.font = '24px Arial';
+    ctx.fillText('First to win ' + MATCH_SCORE_TO_WIN + ' rounds wins the match!', GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    
+    // Draw start instructions
+    ctx.font = '36px Arial';
+    ctx.fillText('Press ENTER to start', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
+}
+
+// Draw pause screen
+function drawPauseScreen() {
+    // Draw semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw pause text
     ctx.fillStyle = 'white';
     ctx.font = '48px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40);
+    ctx.fillText('PAUSED', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
     
-    // Draw winner text
-    if (gameState.winner) {
-        ctx.font = '36px Arial';
-        const winnerColor = gameState.winner === 1 ? 'red' : 'blue';
+    // Draw resume instructions
+    ctx.font = '24px Arial';
+    ctx.fillText('Press P to resume', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+}
+
+// Draw round over screen
+function drawRoundOverScreen() {
+    // Draw semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw round over text
+    ctx.fillStyle = 'white';
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ROUND OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60);
+    
+    // Draw round winner text
+    ctx.font = '36px Arial';
+    if (gameState.roundWinner === 0) {
+        ctx.fillStyle = 'yellow';
+        ctx.fillText('It\'s a tie!', GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    } else {
+        const winnerColor = gameState.roundWinner === 1 ? 'red' : 'blue';
         ctx.fillStyle = winnerColor;
-        ctx.fillText(`Player ${gameState.winner} wins!`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20);
+        ctx.fillText(`Player ${gameState.roundWinner} wins the round!`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
     }
     
-    // Draw restart instructions
+    // Draw next round instructions
     ctx.fillStyle = 'white';
     ctx.font = '24px Arial';
-    ctx.fillText('Press R to restart', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
+    ctx.fillText('Press ENTER to continue', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
+}
+
+// Draw match over screen
+function drawMatchOverScreen() {
+    // Draw semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw match over text
+    ctx.fillStyle = 'white';
+    ctx.font = '48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('MATCH OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60);
+    
+    // Draw match winner text
+    ctx.font = '36px Arial';
+    const winnerColor = gameState.matchWinner === 1 ? 'red' : 'blue';
+    ctx.fillStyle = winnerColor;
+    ctx.fillText(`Player ${gameState.matchWinner} wins the match!`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    
+    // Draw final score
+    ctx.fillStyle = 'white';
+    ctx.font = '24px Arial';
+    ctx.fillText(`Final Score: ${gameState.scores.player1} - ${gameState.scores.player2}`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40);
+    
+    // Draw restart instructions
+    ctx.fillText('Press R to play again', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 80);
 }
 
 // Draw game information
@@ -263,11 +421,12 @@ function drawGameInfo() {
     
     // Draw phase info
     ctx.font = '16px Arial';
-    ctx.fillText(`Phase 7: ${gameState.phase}`, GAME_WIDTH / 2, 60);
+    ctx.fillText(`Phase 8: ${gameState.phase}`, GAME_WIDTH / 2, 60);
     
     // Draw controls info (smaller text at the bottom)
     ctx.textAlign = 'center';
     ctx.font = '12px Arial';
     ctx.fillText('Player 1: WASD to move, E to collect, Q to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 25);
     ctx.fillText('Player 2: Arrow keys to move, / to collect, . to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 10);
+    ctx.fillText('Game Controls: ENTER to start/continue, P to pause, R to restart', GAME_WIDTH / 2, GAME_HEIGHT - 40);
 }
