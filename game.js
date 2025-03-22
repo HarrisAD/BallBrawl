@@ -11,6 +11,8 @@ const BALL_SIZE = 15;
 const BALL_COUNT = 10;
 const BALL_RESPAWN_TIME = 3000; // milliseconds
 const MAX_INVENTORY = 3; // maximum number of balls a player can hold
+const THROW_SPEED = 400; // pixels per second
+const AIM_LINE_LENGTH = 50; // length of aiming line
 
 // Players
 const player1 = {
@@ -25,7 +27,10 @@ const player1 = {
     moveLeft: false,
     moveRight: false,
     inventory: 0, // number of balls held
-    lastCollectTime: 0 // to prevent rapid collection
+    lastCollectTime: 0, // to prevent rapid collection
+    aiming: false, // whether player is currently aiming
+    aimAngle: 0, // angle of aim in radians
+    aimSpeed: Math.PI / 2 // rotation speed in radians per second
 };
 
 const player2 = {
@@ -40,18 +45,21 @@ const player2 = {
     moveLeft: false,
     moveRight: false,
     inventory: 0, // number of balls held
-    lastCollectTime: 0 // to prevent rapid collection
+    lastCollectTime: 0, // to prevent rapid collection
+    aiming: false, // whether player is currently aiming
+    aimAngle: Math.PI, // angle of aim in radians (start aiming left)
+    aimSpeed: Math.PI / 2 // rotation speed in radians per second
 };
 
 // Balls array
 const balls = [];
-const collectedBalls = []; // Track balls that have been collected
+const thrownBalls = []; // Track balls that have been thrown
 
 // Game state object
 const gameState = {
     running: true,
     lastTime: 0,
-    phase: 'Collection Mechanics'
+    phase: 'Throwing Mechanics'
 };
 
 // Initialize the game
@@ -114,6 +122,10 @@ function setupControls() {
         // Ball collection controls
         if (e.key === 'e') collectBall(player1);
         if (e.key === '/') collectBall(player2);
+        
+        // Aiming controls
+        if (e.key === 'q') player1.aiming = true;
+        if (e.key === '.') player2.aiming = true;
     });
     
     // Add event listeners for keyup
@@ -129,6 +141,16 @@ function setupControls() {
         if (e.key === 'ArrowDown') player2.moveDown = false;
         if (e.key === 'ArrowLeft') player2.moveLeft = false;
         if (e.key === 'ArrowRight') player2.moveRight = false;
+        
+        // Throwing controls
+        if (e.key === 'q' && player1.aiming) {
+            throwBall(player1);
+            player1.aiming = false;
+        }
+        if (e.key === '.' && player2.aiming) {
+            throwBall(player2);
+            player2.aiming = false;
+        }
     });
 }
 
@@ -162,6 +184,35 @@ function collectBall(player) {
             break;
         }
     }
+}
+
+// Throw a ball in the direction the player is aiming
+function throwBall(player) {
+    // Check if player has balls to throw
+    if (player.inventory <= 0) {
+        return;
+    }
+    
+    // Reduce player's inventory
+    player.inventory--;
+    
+    // Calculate throw direction based on aim angle
+    const vx = Math.cos(player.aimAngle) * THROW_SPEED;
+    const vy = Math.sin(player.aimAngle) * THROW_SPEED;
+    
+    // Create a new thrown ball
+    const thrownBall = {
+        x: player.x + Math.cos(player.aimAngle) * (player.width / 2 + 5),
+        y: player.y + Math.sin(player.aimAngle) * (player.height / 2 + 5),
+        radius: BALL_SIZE / 2,
+        color: player.color === 'red' ? 'darkred' : 'darkblue', // Tint based on player
+        vx: vx,
+        vy: vy,
+        owner: player === player1 ? 1 : 2 // Track which player threw the ball
+    };
+    
+    // Add the ball to the thrown balls array
+    thrownBalls.push(thrownBall);
 }
 
 // Respawn a collected ball
@@ -208,6 +259,12 @@ function update(deltaTime) {
     
     // Update player 2 position
     updatePlayerPosition(player2, deltaTime);
+    
+    // Update aiming angles if players are aiming
+    updateAimingAngles(deltaTime);
+    
+    // Update thrown balls
+    updateThrownBalls(deltaTime);
 }
 
 // Update player position based on movement flags
@@ -224,6 +281,49 @@ function updatePlayerPosition(player, deltaTime) {
     // Apply boundary constraints
     player.x = Math.max(player.width / 2, Math.min(GAME_WIDTH - player.width / 2, player.x));
     player.y = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, player.y));
+}
+
+// Update aiming angles for players who are aiming
+function updateAimingAngles(deltaTime) {
+    // Rotate Player 1's aim angle counterclockwise when aiming
+    if (player1.aiming) {
+        player1.aimAngle -= player1.aimSpeed * deltaTime;
+        // Keep angle within 0 to 2π range
+        if (player1.aimAngle < 0) player1.aimAngle += Math.PI * 2;
+    }
+    
+    // Rotate Player 2's aim angle counterclockwise when aiming
+    if (player2.aiming) {
+        player2.aimAngle -= player2.aimSpeed * deltaTime;
+        // Keep angle within 0 to 2π range
+        if (player2.aimAngle < 0) player2.aimAngle += Math.PI * 2;
+    }
+}
+
+// Update thrown balls (move them and check for wall collisions)
+function updateThrownBalls(deltaTime) {
+    for (let i = thrownBalls.length - 1; i >= 0; i--) {
+        const ball = thrownBalls[i];
+        
+        // Update ball position
+        ball.x += ball.vx * deltaTime;
+        ball.y += ball.vy * deltaTime;
+        
+        // Check for wall collisions
+        // Left or right wall
+        if (ball.x - ball.radius < 0 || ball.x + ball.radius > GAME_WIDTH) {
+            // Remove the ball when it hits a wall for now
+            thrownBalls.splice(i, 1);
+            continue;
+        }
+        
+        // Top or bottom wall
+        if (ball.y - ball.radius < 0 || ball.y + ball.radius > GAME_HEIGHT) {
+            // Remove the ball when it hits a wall for now
+            thrownBalls.splice(i, 1);
+            continue;
+        }
+    }
 }
 
 // Check if a player and a ball are colliding
@@ -243,18 +343,25 @@ function isColliding(player, ball) {
 
 // Render game objects
 function render() {
-    // Draw balls
+    // Draw balls (collectible)
     drawBalls();
+    
+    // Draw thrown balls
+    drawThrownBalls();
     
     // Draw players
     drawPlayer(player1);
     drawPlayer(player2);
     
+    // Draw aiming lines if players are aiming
+    if (player1.aiming) drawAimLine(player1);
+    if (player2.aiming) drawAimLine(player2);
+    
     // Draw game info
     drawGameInfo();
 }
 
-// Draw all balls
+// Draw all collectible balls
 function drawBalls() {
     for (const ball of balls) {
         // Only draw active balls
@@ -264,11 +371,51 @@ function drawBalls() {
     }
 }
 
+// Draw all thrown balls
+function drawThrownBalls() {
+    for (const ball of thrownBalls) {
+        drawBall(ball);
+    }
+}
+
 // Draw a single ball
 function drawBall(ball) {
     ctx.fillStyle = ball.color;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+// Draw aim line for a player
+function drawAimLine(player) {
+    const startX = player.x;
+    const startY = player.y;
+    const endX = startX + Math.cos(player.aimAngle) * AIM_LINE_LENGTH;
+    const endY = startY + Math.sin(player.aimAngle) * AIM_LINE_LENGTH;
+    
+    ctx.strokeStyle = player.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    
+    // Draw arrowhead
+    const arrowSize = 5;
+    const angle = player.aimAngle;
+    
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(
+        endX - arrowSize * Math.cos(angle - Math.PI / 6),
+        endY - arrowSize * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.lineTo(
+        endX - arrowSize * Math.cos(angle + Math.PI / 6),
+        endY - arrowSize * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.closePath();
+    ctx.fillStyle = player.color;
     ctx.fill();
 }
 
@@ -316,12 +463,17 @@ function drawGameInfo() {
     
     // Draw phase info
     ctx.font = '16px Arial';
-    ctx.fillText(`Phase 4: ${gameState.phase}`, GAME_WIDTH / 2, 60);
+    ctx.fillText(`Phase 5: ${gameState.phase}`, GAME_WIDTH / 2, 60);
     
     // Draw controls info
-    ctx.font = '14px Arial';
-    ctx.fillText('Player 1: WASD to move, E to collect', 150, 30);
-    ctx.fillText('Player 2: Arrow keys to move, / to collect', GAME_WIDTH - 150, 30);
+    ctx.textAlign = 'left';
+    ctx.font = '12px Arial';
+    ctx.fillText('Player 1: WASD to move', 10, 30);
+    ctx.fillText('E to collect, Q to aim/throw', 10, 45);
+    
+    ctx.textAlign = 'right';
+    ctx.fillText('Player 2: Arrow keys to move', GAME_WIDTH - 10, 30);
+    ctx.fillText('/ to collect, . to aim/throw', GAME_WIDTH - 10, 45);
 }
 
 // Initialize the game when the page loads
