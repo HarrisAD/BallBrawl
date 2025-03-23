@@ -23,7 +23,9 @@ const player1 = {
     knockbackVelocityX: 0, // knockback velocity X
     knockbackVelocityY: 0, // knockback velocity Y
     isInvincible: false, // whether player is currently invincible
-    invincibleEndTime: 0 // when invincibility ends
+    invincibleEndTime: 0, // when invincibility ends
+    collectAnimation: 0, // frames of collect animation
+    throwAnimation: 0 // frames of throw animation
 };
 
 // Create player 2
@@ -49,7 +51,9 @@ const player2 = {
     knockbackVelocityX: 0, // knockback velocity X
     knockbackVelocityY: 0, // knockback velocity Y
     isInvincible: false, // whether player is currently invincible
-    invincibleEndTime: 0 // when invincibility ends
+    invincibleEndTime: 0, // when invincibility ends
+    collectAnimation: 0, // frames of collect animation
+    throwAnimation: 0 // frames of throw animation
 };
 
 // Update player position based on movement flags
@@ -187,6 +191,8 @@ function resetPlayers() {
     player1.health = MAX_HEALTH;
     player1.isKnockedBack = false;
     player1.isInvincible = false;
+    player1.collectAnimation = 0;
+    player1.throwAnimation = 0;
     
     // Reset player 2
     player2.x = 600;
@@ -195,4 +201,6 @@ function resetPlayers() {
     player2.health = MAX_HEALTH;
     player2.isKnockedBack = false;
     player2.isInvincible = false;
+    player2.collectAnimation = 0;
+    player2.throwAnimation = 0;
 }

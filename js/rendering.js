@@ -97,16 +97,186 @@ function drawBalls() {
 // Draw all thrown balls
 function drawThrownBalls() {
     for (const ball of thrownBalls) {
+        // Draw trail first (so it's behind the ball)
+        drawBallTrail(ball);
+        
+        // Draw the ball
         drawBall(ball);
     }
+    
+    // Draw ball effects
+    drawBallEffects();
+}
+
+// Draw ball effects
+function drawBallEffects() {
+    for (const effect of ballEffects) {
+        ctx.globalAlpha = effect.alpha;
+        
+        switch (effect.type) {
+            case 'collect':
+                // Expanding circle
+                ctx.strokeStyle = effect.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+                
+            case 'impact':
+                // Explosion effect
+                const gradient = ctx.createRadialGradient(
+                    effect.x, effect.y, 0,
+                    effect.x, effect.y, effect.radius
+                );
+                gradient.addColorStop(0, effect.color);
+                gradient.addColorStop(1, 'transparent');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'hit':
+                // Star-like explosion
+                ctx.strokeStyle = effect.color;
+                ctx.lineWidth = 3;
+                
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    const innerRadius = effect.radius * 0.3;
+                    const outerRadius = effect.radius;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        effect.x + innerRadius * Math.cos(angle),
+                        effect.y + innerRadius * Math.sin(angle)
+                    );
+                    ctx.lineTo(
+                        effect.x + outerRadius * Math.cos(angle),
+                        effect.y + outerRadius * Math.sin(angle)
+                    );
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'spawn':
+                // Expanding pulsing circle
+                ctx.strokeStyle = effect.color;
+                ctx.lineWidth = Math.max(1, 3 * (1 - effect.lifeTime / effect.maxLifeTime));
+                
+                ctx.beginPath();
+                ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+        }
+    }
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
+}
+
+// Draw trail for a thrown ball
+function drawBallTrail(ball) {
+    if (!ball.trail || ball.trail.length === 0) return;
+    
+    for (let i = 0; i < ball.trail.length; i++) {
+        const trailPoint = ball.trail[i];
+        
+        // Skip points with no alpha
+        if (trailPoint.alpha <= 0) continue;
+        
+        // Calculate trail point size based on position in trail
+        const trailSize = ball.radius * (i / ball.trail.length);
+        
+        // Draw trail point
+        ctx.globalAlpha = trailPoint.alpha * 0.7;
+        ctx.fillStyle = ball.color;
+        ctx.beginPath();
+        ctx.arc(trailPoint.x, trailPoint.y, trailSize, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
 }
 
 // Draw a single ball
 function drawBall(ball) {
+    // Save context for transformations
+    ctx.save();
+    
+    // Apply scale transformation for spawn animation
+    if (ball.scale !== undefined && ball.scale !== 1) {
+        ctx.translate(ball.x, ball.y);
+        ctx.scale(ball.scale, ball.scale);
+        ctx.translate(-ball.x, -ball.y);
+    }
+    
+    // Update ball animation properties if it's a collectible ball
+    if (ball.pulseDirection !== undefined) {
+        // Update pulse animation
+        ball.pulseSize += ball.pulseDirection;
+        if (ball.pulseSize > 3) ball.pulseDirection = -0.2;
+        if (ball.pulseSize < 0) ball.pulseDirection = 0.2;
+        
+        // Update rotation
+        ball.rotation += ball.rotationSpeed;
+    }
+    
+    // Draw glow effect for collectible balls
+    if (ball.glowIntensity !== undefined) {
+        const gradientSize = ball.radius * 2;
+        const gradient = ctx.createRadialGradient(
+            ball.x, ball.y, ball.radius * 0.5,
+            ball.x, ball.y, ball.radius * 2.5
+        );
+        gradient.addColorStop(0, ball.color);
+        gradient.addColorStop(0.5, `${ball.color}80`); // 50% opacity
+        gradient.addColorStop(1, `${ball.color}00`); // 0% opacity
+        
+        ctx.globalAlpha = 0.3 * ball.glowIntensity;
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+    
+    // Draw the main ball
+    const displayRadius = ball.pulseSize !== undefined ? 
+        ball.radius + ball.pulseSize : ball.radius;
+    
     ctx.fillStyle = ball.color;
     ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.arc(ball.x, ball.y, displayRadius, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Add a shine effect
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.beginPath();
+    ctx.arc(ball.x - ball.radius/3, ball.y - ball.radius/3, ball.radius/3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // For collectible balls, add a pattern
+    if (ball.rotation !== undefined) {
+        ctx.save();
+        ctx.translate(ball.x, ball.y);
+        ctx.rotate(ball.rotation);
+        
+        // Draw a simple pattern on top of the ball
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, ball.radius * 0.6, 0, Math.PI, true);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+    
+    // Restore original context
+    ctx.restore();
 }
 
 // Draw aim line for a player
@@ -172,6 +342,40 @@ function drawAimLine(player) {
 
 // Draw a player
 function drawPlayer(player) {
+    // Create shadow effect
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.ellipse(
+        player.x, 
+        player.y + player.height / 2 + 3, 
+        player.width / 2, 
+        player.width / 4, 
+        0, 0, Math.PI * 2
+    );
+    ctx.fill();
+    
+    // Apply knock back visual effect
+    let playerScale = 1.0;
+    let playerRotation = 0;
+    
+    if (player.isKnockedBack) {
+        // Calculate scale based on knockback time
+        const knockbackProgress = player.knockbackTime / KNOCKBACK_DURATION;
+        playerScale = 1.0 + Math.sin(knockbackProgress * Math.PI) * 0.2;
+        
+        // Add slight rotation based on knockback direction
+        playerRotation = Math.atan2(player.knockbackVelocityY, player.knockbackVelocityX) 
+            + Math.PI / 2; // Adjust so player rotates properly
+    }
+    
+    // Save context for transformations
+    ctx.save();
+    
+    // Apply rotation and scale
+    ctx.translate(player.x, player.y);
+    ctx.rotate(playerRotation);
+    ctx.scale(playerScale, playerScale);
+    
     // Set player color (flash white if invincible)
     if (player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) {
         ctx.fillStyle = 'white';
@@ -180,7 +384,80 @@ function drawPlayer(player) {
     }
     
     // Draw player rectangle
-    ctx.fillRect(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
+    ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height);
+    
+    // Draw player features based on direction
+    // We'll add simple eyes to indicate player facing direction
+    ctx.fillStyle = 'white';
+    
+    // Calculate eye direction based on aim angle
+    const eyeOffsetX = Math.cos(player.aimAngle) * 5;
+    const eyeOffsetY = Math.sin(player.aimAngle) * 5;
+    
+    // Left eye
+    ctx.beginPath();
+    ctx.arc(-player.width / 4 + eyeOffsetX, -player.height / 4 + eyeOffsetY, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Right eye
+    ctx.beginPath();
+    ctx.arc(player.width / 4 + eyeOffsetX, -player.height / 4 + eyeOffsetY, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw collection animation if active
+    if (player.collectAnimation > 0) {
+        // Decrease animation counter
+        player.collectAnimation--;
+        
+        // Draw collection particles
+        const particleCount = 5;
+        const animationProgress = 1 - player.collectAnimation / 15;
+        
+        ctx.fillStyle = player.color;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const angle = i * (Math.PI * 2) / particleCount;
+            const distance = animationProgress * player.width;
+            
+            const particleX = Math.cos(angle) * distance;
+            const particleY = Math.sin(angle) * distance;
+            const particleSize = (1 - animationProgress) * 4;
+            
+            ctx.globalAlpha = 1 - animationProgress;
+            ctx.beginPath();
+            ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Reset alpha
+        ctx.globalAlpha = 1.0;
+    }
+    
+    // Draw throw animation if active
+    if (player.throwAnimation > 0) {
+        // Decrease animation counter
+        player.throwAnimation--;
+        
+        // Calculate throw direction
+        const throwX = Math.cos(player.aimAngle) * player.width;
+        const throwY = Math.sin(player.aimAngle) * player.width;
+        
+        // Draw throw line
+        ctx.strokeStyle = player.color;
+        ctx.lineWidth = (player.throwAnimation / 10) * 3; // Line gets thinner as animation progresses
+        ctx.globalAlpha = player.throwAnimation / 10;
+        
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(throwX, throwY);
+        ctx.stroke();
+        
+        // Reset alpha
+        ctx.globalAlpha = 1.0;
+    }
+    
+    // Restore original context
+    ctx.restore();
     
     // Draw inventory indicators
     drawInventory(player);
@@ -212,49 +489,126 @@ function drawInventory(player) {
 
 // Draw health bars for both players
 function drawHealthBars() {
-    const barWidth = 100;
-    const barHeight = 15;
+    const barWidth = 30;
+    const barHeight = 100;
     const padding = 10;
     
     // Draw player 1 health bar (left side)
-    drawHealthBar(padding, padding, barWidth, barHeight, player1.health, MAX_HEALTH, 'red');
+    drawHealthBar(padding, GAME_HEIGHT / 2 - barHeight / 2, barWidth, barHeight, player1.health, MAX_HEALTH, 'red', 'P1');
     
     // Draw player 2 health bar (right side)
-    drawHealthBar(GAME_WIDTH - padding - barWidth, padding, barWidth, barHeight, player2.health, MAX_HEALTH, 'blue');
+    drawHealthBar(GAME_WIDTH - padding - barWidth, GAME_HEIGHT / 2 - barHeight / 2, barWidth, barHeight, player2.health, MAX_HEALTH, 'blue', 'P2');
 }
 
 // Draw a health bar
-function drawHealthBar(x, y, width, height, currentHealth, maxHealth, color) {
+function drawHealthBar(x, y, width, height, currentHealth, maxHealth, color, label) {
+    // Draw background container
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(x - 5, y - 25, width + 10, height + 40);
+    
+    // Draw player label
+    ctx.fillStyle = color;
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + width / 2, y - 8);
+    
     // Draw background
     ctx.fillStyle = '#333';
     ctx.fillRect(x, y, width, height);
     
-    // Draw health
-    const healthWidth = (currentHealth / maxHealth) * width;
+    // Calculate health height (vertical health bar)
+    const healthHeight = (currentHealth / maxHealth) * height;
+    const healthY = y + height - healthHeight;
+    
+    // Draw health (from bottom to top)
     ctx.fillStyle = color;
-    ctx.fillRect(x, y, healthWidth, height);
+    ctx.fillRect(x, healthY, width, healthHeight);
     
     // Draw border
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, width, height);
     
-    // Draw health text
-    ctx.fillStyle = 'white';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${currentHealth}/${maxHealth}`, x + width / 2, y + height / 2 + 4);
+    // Draw health points as heart symbols
+    for (let i = 0; i < maxHealth; i++) {
+        const heartY = y + height - (i + 0.5) * (height / maxHealth);
+        
+        if (i < currentHealth) {
+            // Filled heart for remaining health
+            drawHeart(x + width / 2, heartY, 8, color);
+        } else {
+            // Empty heart for lost health
+            drawHeartOutline(x + width / 2, heartY, 8, color);
+        }
+    }
+}
+
+// Draw a heart symbol
+function drawHeart(x, y, size, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size / 4);
+    ctx.bezierCurveTo(
+        x, y - size / 2,
+        x - size, y - size / 2,
+        x - size, y + size / 4
+    );
+    ctx.bezierCurveTo(
+        x - size, y + size,
+        x, y + size * 1.5,
+        x, y + size * 1.5
+    );
+    ctx.bezierCurveTo(
+        x, y + size * 1.5,
+        x + size, y + size,
+        x + size, y + size / 4
+    );
+    ctx.bezierCurveTo(
+        x + size, y - size / 2,
+        x, y - size / 2,
+        x, y + size / 4
+    );
+    ctx.fill();
+}
+
+// Draw a heart outline
+function drawHeartOutline(x, y, size, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + size / 4);
+    ctx.bezierCurveTo(
+        x, y - size / 2,
+        x - size, y - size / 2,
+        x - size, y + size / 4
+    );
+    ctx.bezierCurveTo(
+        x - size, y + size,
+        x, y + size * 1.5,
+        x, y + size * 1.5
+    );
+    ctx.bezierCurveTo(
+        x, y + size * 1.5,
+        x + size, y + size,
+        x + size, y + size / 4
+    );
+    ctx.bezierCurveTo(
+        x + size, y - size / 2,
+        x, y - size / 2,
+        x, y + size / 4
+    );
+    ctx.stroke();
 }
 
 // Draw scoreboard
 function drawScoreboard() {
-    const scoreboardWidth = 200;
-    const scoreboardHeight = 50;
-    const x = GAME_WIDTH / 2 - scoreboardWidth / 2;
-    const y = 80;
+    const scoreboardWidth = 160;
+    const scoreboardHeight = 40;
+    const x = 10; // Move to top-left corner
+    const y = 10;
     
     // Draw background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(x, y, scoreboardWidth, scoreboardHeight);
     
     // Draw border
@@ -263,25 +617,26 @@ function drawScoreboard() {
     ctx.strokeRect(x, y, scoreboardWidth, scoreboardHeight);
     
     // Draw scores
-    ctx.font = '24px Arial';
+    ctx.font = '20px Arial';
     ctx.textAlign = 'center';
     
     // Player 1 score
     ctx.fillStyle = 'red';
-    ctx.fillText(gameState.scores.player1.toString(), x + scoreboardWidth / 4, y + 35);
+    ctx.fillText(gameState.scores.player1.toString(), x + 40, y + 28);
     
     // Vs text
     ctx.fillStyle = 'white';
-    ctx.fillText('VS', x + scoreboardWidth / 2, y + 35);
+    ctx.fillText('-', x + 80, y + 28);
     
     // Player 2 score
     ctx.fillStyle = 'blue';
-    ctx.fillText(gameState.scores.player2.toString(), x + scoreboardWidth * 3 / 4, y + 35);
+    ctx.fillText(gameState.scores.player2.toString(), x + 120, y + 28);
     
     // Draw round number
     ctx.fillStyle = 'white';
-    ctx.font = '16px Arial';
-    ctx.fillText(`Round ${gameState.roundNumber}`, x + scoreboardWidth / 2, y + 15);
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Round ${gameState.roundNumber}`, x + 10, y + 15);
 }
 
 // Draw round timer
@@ -293,11 +648,11 @@ function drawRoundTimer() {
     
     const timerWidth = 80;
     const timerHeight = 30;
-    const x = GAME_WIDTH / 2 - timerWidth / 2;
-    const y = 140;
+    const x = GAME_WIDTH - timerWidth - 10; // Move to top-right corner
+    const y = 10;
     
     // Draw background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.fillRect(x, y, timerWidth, timerHeight);
     
     // Draw border
@@ -311,7 +666,7 @@ function drawRoundTimer() {
     const timeStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
     
     // Draw time
-    ctx.fillStyle = gameState.roundTimer <= 10 ? 'red' : 'white'; // Red when <= a10 seconds
+    ctx.fillStyle = gameState.roundTimer <= 10 ? 'red' : 'white'; // Red when <= 10 seconds
     ctx.font = '18px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(timeStr, x + timerWidth / 2, y + 22);
@@ -413,20 +768,73 @@ function drawMatchOverScreen() {
 
 // Draw game information
 function drawGameInfo() {
-    // Draw game title
+    // Draw game title (always visible)
     ctx.font = '20px Arial';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
-    ctx.fillText('BallBrawl', GAME_WIDTH / 2, 30);
+    ctx.fillText('BallBrawl', GAME_WIDTH / 2, 20);
     
-    // Draw phase info
-    ctx.font = '16px Arial';
-    ctx.fillText(`Phase 8: ${gameState.phase}`, GAME_WIDTH / 2, 60);
+    // Only show full game info in the start screen or game over screens
+    if (gameState.status === GAME_STATE.START || 
+        gameState.status === GAME_STATE.ROUND_OVER || 
+        gameState.status === GAME_STATE.MATCH_OVER) {
+        
+        // Draw controls info in a more visible box at the bottom
+        const controlsWidth = 600;
+        const controlsHeight = 80;
+        const x = GAME_WIDTH / 2 - controlsWidth / 2;
+        const y = GAME_HEIGHT - controlsHeight - 10;
+        
+        // Draw semi-transparent background for controls
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x, y, controlsWidth, controlsHeight);
+        
+        // Draw border
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, controlsWidth, controlsHeight);
+        
+        // Draw controls text
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'white';
+        ctx.font = '16px Arial';
+        ctx.fillText('Controls', x + controlsWidth / 2, y + 20);
+        
+        ctx.font = '14px Arial';
+        ctx.fillText('Player 1: WASD to move, E to collect, Q to aim/throw', x + controlsWidth / 2, y + 40);
+        ctx.fillText('Player 2: Arrow keys to move, / to collect, . to aim/throw', x + controlsWidth / 2, y + 60);
+        ctx.fillText('Game: ENTER to start/continue, P to pause, R to restart', x + controlsWidth / 2, y + 80);
+    }
     
-    // Draw controls info (smaller text at the bottom)
-    ctx.textAlign = 'center';
+    // Draw state indicator (small text in upper corner)
     ctx.font = '12px Arial';
-    ctx.fillText('Player 1: WASD to move, E to collect, Q to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 25);
-    ctx.fillText('Player 2: Arrow keys to move, / to collect, . to aim/throw', GAME_WIDTH / 2, GAME_HEIGHT - 10);
-    ctx.fillText('Game Controls: ENTER to start/continue, P to pause, R to restart', GAME_WIDTH / 2, GAME_HEIGHT - 40);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.textAlign = 'right';
+    
+    let stateText = '';
+    switch (gameState.status) {
+        case GAME_STATE.START:
+            stateText = 'PRESS ENTER TO START';
+            break;
+        case GAME_STATE.PLAYING:
+            stateText = 'GAME IN PROGRESS';
+            break;
+        case GAME_STATE.PAUSED:
+            stateText = 'GAME PAUSED';
+            break;
+        case GAME_STATE.ROUND_OVER:
+            stateText = 'ROUND OVER';
+            break;
+        case GAME_STATE.MATCH_OVER:
+            stateText = 'MATCH OVER';
+            break;
+    }
+    
+    ctx.fillText(stateText, GAME_WIDTH - 10, 40);
+    
+    // Draw phase indicator
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`Phase 9: UI Elements`, GAME_WIDTH - 10, 60);
 }
