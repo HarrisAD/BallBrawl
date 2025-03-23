@@ -233,8 +233,8 @@ function drawBall(ball) {
             ball.x, ball.y, ball.radius * 2.5
         );
         gradient.addColorStop(0, ball.color);
-        gradient.addColorStop(0.5, `${ball.color}80`); // 50% opacity
-        gradient.addColorStop(1, `${ball.color}00`); // 0% opacity
+        gradient.addColorStop(0.5, `rgba(${getColorRGB(ball.color)}, 0.5)`); // 50% opacity
+        gradient.addColorStop(1, `rgba(${getColorRGB(ball.color)}, 0)`); // 0% opacity
         
         ctx.globalAlpha = 0.3 * ball.glowIntensity;
         ctx.fillStyle = gradient;
@@ -792,7 +792,7 @@ function drawGameInfo() {
         // Draw border
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, controlsWidth, controlsHeight);
+        ctx.strokeRect(x, y,controlsWidth, controlsHeight);
         
         // Draw controls text
         ctx.textAlign = 'center';
