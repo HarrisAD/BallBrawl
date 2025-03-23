@@ -313,8 +313,11 @@ function drawAimLine(player) {
         endY = player.y + Math.sin(player.aimAngle) * AIM_LINE_LENGTH;
     }
     
+    // Determine aim line color - red if line of sight is blocked
+    const aimColor = player.lineOfSight ? player.color : 'orange';
+    
     // Draw the aim line
-    ctx.strokeStyle = player.color;
+    ctx.strokeStyle = aimColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(player.x, player.y);
@@ -336,7 +339,7 @@ function drawAimLine(player) {
         endY - arrowSize * Math.sin(angle + Math.PI / 6)
     );
     ctx.closePath();
-    ctx.fillStyle = player.color;
+    ctx.fillStyle = aimColor;
     ctx.fill();
 }
 

@@ -70,6 +70,9 @@ function update(deltaTime) {
     // Update player 2 position
     updatePlayerPosition(player2, deltaTime);
     
+    // Update aiming angles (auto-aim at opponents)
+    updateAimingAngles();
+    
     // Update thrown balls
     updateThrownBalls(deltaTime);
     
