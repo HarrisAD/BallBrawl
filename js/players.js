@@ -23,8 +23,11 @@ const player1 = {
     knockbackVelocityY: 0, // knockback velocity Y
     isInvincible: false, // whether player is currently invincible
     invincibleEndTime: 0, // when invincibility ends
+    isInvisible: false, // whether player is invisible
+    invisibleEndTime: 0, // when invisibility ends
     collectAnimation: 0, // frames of collect animation
-    throwAnimation: 0 // frames of throw animation
+    throwAnimation: 0, // frames of throw animation
+    lineOfSight: true // whether player has line of sight to opponent
 };
 
 // Create player 2
@@ -50,8 +53,11 @@ const player2 = {
     knockbackVelocityY: 0, // knockback velocity Y
     isInvincible: false, // whether player is currently invincible
     invincibleEndTime: 0, // when invincibility ends
+    isInvisible: false, // whether player is invisible
+    invisibleEndTime: 0, // when invisibility ends
     collectAnimation: 0, // frames of collect animation
-    throwAnimation: 0 // frames of throw animation
+    throwAnimation: 0, // frames of throw animation
+    lineOfSight: true // whether player has line of sight to opponent
 };
 
 // Update player position based on movement flags
@@ -123,36 +129,48 @@ function updatePlayerPosition(player, deltaTime) {
 function updateAimingAngles() {
     // If player 1 is aiming, auto-aim at player 2
     if (player1.aiming) {
-        // Calculate angle from player 1 to player 2
-        const dx = player2.x - player1.x;
-        const dy = player2.y - player1.y;
-        player1.aimAngle = Math.atan2(dy, dx);
-        
-        // Check for obstacles in the line of sight
-        const lineOfSight = hasLineOfSight(player1, player2);
-        
-        // If line of sight is blocked, make aiming indicator look different
-        // This is a visual cue only - you can still throw, but might hit an obstacle
-        player1.lineOfSight = lineOfSight;
+        // Don't target invisible players
+        if (!player2.isInvisible) {
+            // Calculate angle from player 1 to player 2
+            const dx = player2.x - player1.x;
+            const dy = player2.y - player1.y;
+            player1.aimAngle = Math.atan2(dy, dx);
+            
+            // Check for obstacles in the line of sight
+            const lineOfSight = hasLineOfSight(player1, player2);
+            
+            // If line of sight is blocked, make aiming indicator look different
+            // This is a visual cue only - you can still throw, but might hit an obstacle
+            player1.lineOfSight = lineOfSight;
+        }
     }
     
     // If player 2 is aiming, auto-aim at player 1
     if (player2.aiming) {
-        // Calculate angle from player 2 to player 1
-        const dx = player1.x - player2.x;
-        const dy = player1.y - player2.y;
-        player2.aimAngle = Math.atan2(dy, dx);
-        
-        // Check for obstacles in the line of sight
-        const lineOfSight = hasLineOfSight(player2, player1);
-        
-        // If line of sight is blocked, make aiming indicator look different
-        player2.lineOfSight = lineOfSight;
+        // Don't target invisible players
+        if (!player1.isInvisible) {
+            // Calculate angle from player 2 to player 1
+            const dx = player1.x - player2.x;
+            const dy = player1.y - player2.y;
+            player2.aimAngle = Math.atan2(dy, dx);
+            
+            // Check for obstacles in the line of sight
+            const lineOfSight = hasLineOfSight(player2, player1);
+            
+            // If line of sight is blocked, make aiming indicator look different
+            player2.lineOfSight = lineOfSight;
+        }
     }
 }
 
 // Check if there's a clear line of sight between two players
 function hasLineOfSight(player1, player2) {
+    // If the target is invisible, there's no line of sight
+    if ((player1 === window.player1 && player2.isInvisible) || 
+        (player1 === window.player2 && player1.isInvisible)) {
+        return false;
+    }
+    
     // Perform ray casting from player1 to player2
     const dx = player2.x - player1.x;
     const dy = player2.y - player1.y;
@@ -213,6 +231,11 @@ function applyKnockback(player, ball) {
     player.isInvincible = true;
     player.invincibleEndTime = Date.now() + INVINCIBILITY_DURATION;
     
+    // End invisibility if player is hit
+    if (player.isInvisible) {
+        player.isInvisible = false;
+    }
+    
     // Reduce health
     player.health--;
     
@@ -232,6 +255,7 @@ function resetPlayers() {
     player1.health = MAX_HEALTH;
     player1.isKnockedBack = false;
     player1.isInvincible = false;
+    player1.isInvisible = false;
     player1.collectAnimation = 0;
     player1.throwAnimation = 0;
     player1.aiming = false;
@@ -244,6 +268,7 @@ function resetPlayers() {
     player2.health = MAX_HEALTH;
     player2.isKnockedBack = false;
     player2.isInvincible = false;
+    player2.isInvisible = false;
     player2.collectAnimation = 0;
     player2.throwAnimation = 0;
     player2.aiming = false;

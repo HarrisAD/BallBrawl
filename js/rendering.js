@@ -8,6 +8,9 @@ function render() {
     // Draw balls (collectible)
     drawBalls();
     
+    // Draw invisibility powerup
+    drawInvisibilityPowerup();
+    
     // Draw thrown balls
     drawThrownBalls();
     
@@ -94,6 +97,95 @@ function drawBalls() {
     }
 }
 
+// Draw invisibility powerup
+function drawInvisibilityPowerup() {
+    if (!invisibilityPowerup.active) return;
+    
+    // Save context for transformations
+    ctx.save();
+    
+    // Apply scale for spawn animation
+    if (invisibilityPowerup.scale < 1) {
+        ctx.translate(invisibilityPowerup.x, invisibilityPowerup.y);
+        ctx.scale(invisibilityPowerup.scale, invisibilityPowerup.scale);
+        ctx.translate(-invisibilityPowerup.x, -invisibilityPowerup.y);
+    }
+    
+    // Draw glow effect
+    const gradient = ctx.createRadialGradient(
+        invisibilityPowerup.x, invisibilityPowerup.y, 
+        invisibilityPowerup.radius * 0.5,
+        invisibilityPowerup.x, invisibilityPowerup.y, 
+        invisibilityPowerup.radius * 3
+    );
+    
+    // Pulsing rainbow-like effect
+    const time = Date.now() / 1000;
+    const hue1 = (time * 20) % 360;
+    const hue2 = (hue1 + 180) % 360;
+    
+    gradient.addColorStop(0, `hsl(${hue1}, 100%, 80%)`);
+    gradient.addColorStop(0.7, `hsla(${hue2}, 100%, 70%, 0.5)`);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(
+        invisibilityPowerup.x, 
+        invisibilityPowerup.y, 
+        invisibilityPowerup.radius * 3 + invisibilityPowerup.pulseSize, 
+        0, Math.PI * 2
+    );
+    ctx.fill();
+    
+    // Draw main powerup
+    const displayRadius = invisibilityPowerup.radius + invisibilityPowerup.pulseSize;
+    
+    ctx.fillStyle = 'white';
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.arc(invisibilityPowerup.x, invisibilityPowerup.y, displayRadius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw invisibility symbol
+    ctx.save();
+    ctx.translate(invisibilityPowerup.x, invisibilityPowerup.y);
+    ctx.rotate(invisibilityPowerup.rotation);
+    
+    // Draw an eye symbol that's crossed out
+    const eyeSize = invisibilityPowerup.radius * 0.6;
+    
+    // Eye outline
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, eyeSize, eyeSize / 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Eye pupil
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(0, 0, eyeSize / 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Strike-through line
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-eyeSize * 1.2, -eyeSize * 0.8);
+    ctx.lineTo(eyeSize * 1.2, eyeSize * 0.8);
+    ctx.stroke();
+    
+    ctx.restore();
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
+    
+    // Restore original context
+    ctx.restore();
+}
+
 // Draw all thrown balls
 function drawThrownBalls() {
     for (const ball of thrownBalls) {
@@ -169,6 +261,49 @@ function drawBallEffects() {
                 ctx.beginPath();
                 ctx.arc(effect.x, effect.y, effect.radius, 0, Math.PI * 2);
                 ctx.stroke();
+                break;
+                
+            case 'invisibility':
+                // Special invisibility effect
+                const ringCount = 3;
+                const maxRadius = effect.radius;
+                
+                for (let i = 0; i < ringCount; i++) {
+                    const radiusRatio = (i + 1) / ringCount;
+                    const radius = maxRadius * radiusRatio;
+                    
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2 * (1 - effect.lifeTime / effect.maxLifeTime);
+                    ctx.globalAlpha = effect.alpha * (1 - radiusRatio);
+                    
+                    ctx.beginPath();
+                    ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                // Draw some sparkle lines
+                const sparkleCount = 12;
+                
+                for (let i = 0; i < sparkleCount; i++) {
+                    const angle = (i / sparkleCount) * Math.PI * 2;
+                    const innerRadius = maxRadius * 0.3;
+                    const outerRadius = maxRadius;
+                    
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1;
+                    ctx.globalAlpha = effect.alpha * 0.7;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        effect.x + innerRadius * Math.cos(angle),
+                        effect.y + innerRadius * Math.sin(angle)
+                    );
+                    ctx.lineTo(
+                        effect.x + outerRadius * Math.cos(angle),
+                        effect.y + outerRadius * Math.sin(angle)
+                    );
+                    ctx.stroke();
+                }
                 break;
         }
     }
@@ -345,17 +480,22 @@ function drawAimLine(player) {
 
 // Draw a player
 function drawPlayer(player) {
-    // Create shadow effect
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.beginPath();
-    ctx.ellipse(
-        player.x, 
-        player.y + player.height / 2 + 3, 
-        player.width / 2, 
-        player.width / 4, 
-        0, 0, Math.PI * 2
-    );
-    ctx.fill();
+    // Skip rendering if player is invisible (except for the player themselves who gets a ghost effect)
+    const isInvisibleEnemy = player.isInvisible;
+    
+    // Create shadow effect (only if not invisible)
+    if (!isInvisibleEnemy) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(
+            player.x, 
+            player.y + player.height / 2 + 3, 
+            player.width / 2, 
+            player.width / 4, 
+            0, 0, Math.PI * 2
+        );
+        ctx.fill();
+    }
     
     // Apply knock back visual effect
     let playerScale = 1.0;
@@ -378,6 +518,11 @@ function drawPlayer(player) {
     ctx.translate(player.x, player.y);
     ctx.rotate(playerRotation);
     ctx.scale(playerScale, playerScale);
+    
+    // Set player opacity based on invisibility
+    if (player.isInvisible) {
+        ctx.globalAlpha = 0.3; // Ghost effect for invisible player (only visible to the player themselves)
+    }
     
     // Set player color (flash white if invincible)
     if (player.isInvincible && Math.floor(Date.now() / 100) % 2 === 0) {
@@ -426,14 +571,14 @@ function drawPlayer(player) {
             const particleY = Math.sin(angle) * distance;
             const particleSize = (1 - animationProgress) * 4;
             
-            ctx.globalAlpha = 1 - animationProgress;
+            ctx.globalAlpha = (1 - animationProgress) * (player.isInvisible ? 0.3 : 1.0);
             ctx.beginPath();
             ctx.arc(particleX, particleY, particleSize, 0, Math.PI * 2);
             ctx.fill();
         }
         
         // Reset alpha
-        ctx.globalAlpha = 1.0;
+        ctx.globalAlpha = player.isInvisible ? 0.3 : 1.0;
     }
     
     // Draw throw animation if active
@@ -448,7 +593,7 @@ function drawPlayer(player) {
         // Draw throw line
         ctx.strokeStyle = player.color;
         ctx.lineWidth = (player.throwAnimation / 10) * 3; // Line gets thinner as animation progresses
-        ctx.globalAlpha = player.throwAnimation / 10;
+        ctx.globalAlpha = (player.throwAnimation / 10) * (player.isInvisible ? 0.3 : 1.0);
         
         ctx.beginPath();
         ctx.moveTo(0, 0);
@@ -456,8 +601,37 @@ function drawPlayer(player) {
         ctx.stroke();
         
         // Reset alpha
-        ctx.globalAlpha = 1.0;
+        ctx.globalAlpha = player.isInvisible ? 0.3 : 1.0;
     }
+    
+    // Draw invisibility effect if player is invisible
+    if (player.isInvisible) {
+        // Draw sparkle effect around player
+        const sparkleCount = 8;
+        const time = Date.now() / 200; // Time-based animation
+        
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 1;
+        
+        for (let i = 0; i < sparkleCount; i++) {
+            const angle = (i / sparkleCount) * Math.PI * 2 + time;
+            const distance = player.width * 0.7 + Math.sin(time * 2 + i) * 3;
+            
+            const x1 = Math.cos(angle) * distance * 0.8;
+            const y1 = Math.sin(angle) * distance * 0.8;
+            const x2 = Math.cos(angle) * distance * 1.2;
+            const y2 = Math.sin(angle) * distance * 1.2;
+            
+            ctx.globalAlpha = 0.5 + Math.sin(time * 3 + i) * 0.3;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+    }
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
     
     // Restore original context
     ctx.restore();
@@ -625,7 +799,7 @@ function drawScoreboard() {
     
     // Player 1 score
     ctx.fillStyle = 'red';
-    ctx.fillText(gameState.scores.player1.toString(), x + 40, y + 28);
+    ctx.fillText(gameState.scores.player1.toString(), x + 40, y +28);
     
     // Vs text
     ctx.fillStyle = 'white';
@@ -784,7 +958,7 @@ function drawGameInfo() {
         
         // Draw controls info in a more visible box at the bottom
         const controlsWidth = 600;
-        const controlsHeight = 80;
+        const controlsHeight = 90; // Made slightly higher to accommodate powerup info
         const x = GAME_WIDTH / 2 - controlsWidth / 2;
         const y = GAME_HEIGHT - controlsHeight - 10;
         
@@ -795,7 +969,7 @@ function drawGameInfo() {
         // Draw border
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 1;
-        ctx.strokeRect(x, y,controlsWidth, controlsHeight);
+        ctx.strokeRect(x, y, controlsWidth, controlsHeight);
         
         // Draw controls text
         ctx.textAlign = 'center';
@@ -806,7 +980,7 @@ function drawGameInfo() {
         ctx.font = '14px Arial';
         ctx.fillText('Player 1: WASD to move, E to collect, Q to aim/throw', x + controlsWidth / 2, y + 40);
         ctx.fillText('Player 2: Arrow keys to move, / to collect, . to aim/throw', x + controlsWidth / 2, y + 60);
-        ctx.fillText('Game: ENTER to start/continue, P to pause, R to restart', x + controlsWidth / 2, y + 80);
+        ctx.fillText('Game: ENTER to start/continue, P to pause, R to restart | POWERUP: Collect the glowing orb for invisibility!', x + controlsWidth / 2, y + 80);
     }
     
     // Draw state indicator (small text in upper corner)
@@ -839,5 +1013,5 @@ function drawGameInfo() {
     ctx.font = '12px Arial';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.textAlign = 'right';
-    ctx.fillText(`Phase 9: UI Elements`, GAME_WIDTH - 10, 60);
+    ctx.fillText(`Phase 11: Polish - Invisibility Powerup`, GAME_WIDTH - 10, 60);
 }

@@ -17,6 +17,12 @@ const OBSTACLE_COUNT = 5; // number of obstacles
 const MATCH_SCORE_TO_WIN = 3; // number of rounds to win the match
 const ROUND_TIME_LIMIT = 60; // time limit in seconds for each round
 
+// Invisibility powerup constants
+const INVISIBILITY_DURATION = 5000; // milliseconds
+const INVISIBILITY_SPAWN_INTERVAL_MIN = 15000; // minimum spawn interval in milliseconds
+const INVISIBILITY_SPAWN_INTERVAL_MAX = 30000; // maximum spawn interval in milliseconds
+const INVISIBILITY_ACTIVE_DURATION = 10000; // how long the powerup stays on screen
+
 // Game state constants
 const GAME_STATE = {
     START: 'start',

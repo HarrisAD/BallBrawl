@@ -5,11 +5,34 @@ const balls = [];
 const thrownBalls = [];
 const ballEffects = []; // For visual effects like flashes
 
+// Invisibility powerup
+let invisibilityPowerup = {
+    active: false,
+    x: 0,
+    y: 0,
+    radius: BALL_SIZE / 2,
+    spawnTime: 0,
+    nextSpawnTime: 0,
+    pulseSize: 0,
+    pulseDirection: 0.2,
+    rotation: 0,
+    rotationSpeed: 0.03,
+    scale: 1
+};
+
 // Create balls at random positions
 function createBalls() {
     for (let i = 0; i < BALL_COUNT; i++) {
         createBall();
     }
+    
+    // Initialize first invisibility powerup spawn
+    invisibilityPowerup.nextSpawnTime = Date.now() + getRandomSpawnInterval();
+}
+
+// Get a random spawn interval for invisibility powerup
+function getRandomSpawnInterval() {
+    return Math.random() * (INVISIBILITY_SPAWN_INTERVAL_MAX - INVISIBILITY_SPAWN_INTERVAL_MIN) + INVISIBILITY_SPAWN_INTERVAL_MIN;
 }
 
 // Create a single ball at a random position
@@ -87,6 +110,127 @@ function createBallEffect(x, y, color, type) {
     };
     
     ballEffects.push(effect);
+}
+
+// Spawn the invisibility powerup
+function spawnInvisibilityPowerup() {
+    // Only spawn if not already active
+    if (invisibilityPowerup.active) return;
+    
+    // Set a minimum distance from obstacles
+    const minObstacleDistance = BALL_SIZE * 2;
+    
+    // Generate a random position
+    let x, y;
+    let validPosition = false;
+    
+    // Keep trying until we find a valid position
+    const maxAttempts = 100;
+    let attempts = 0;
+    
+    while (!validPosition && attempts < maxAttempts) {
+        attempts++;
+        
+        // Generate a random position within the canvas
+        x = Math.random() * (GAME_WIDTH - BALL_SIZE * 2) + BALL_SIZE;
+        y = Math.random() * (GAME_HEIGHT - BALL_SIZE * 2) + BALL_SIZE;
+        
+        // Check distance from obstacles
+        let tooCloseToObstacle = false;
+        for (const obstacle of obstacles) {
+            if (circleRectCollision({x, y, radius: BALL_SIZE / 2}, obstacle)) {
+                tooCloseToObstacle = true;
+                break;
+            }
+        }
+        
+        // Position is valid if it's far enough from obstacles
+        if (!tooCloseToObstacle) {
+            validPosition = true;
+        }
+    }
+    
+    // If we couldn't find a valid position, use the last attempted one
+    if (!validPosition) {
+        console.warn('Could not find an ideal powerup position');
+    }
+    
+    // Set up the invisibility powerup
+    invisibilityPowerup = {
+        active: true,
+        x: x,
+        y: y,
+        radius: BALL_SIZE / 2,
+        spawnTime: Date.now(),
+        nextSpawnTime: 0,
+        pulseSize: 0,
+        pulseDirection: 0.2,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: 0.03,
+        scale: 0 // Start with scale 0 for spawn animation
+    };
+    
+    // Create spawn effect
+    createBallEffect(x, y, 'white', 'spawn');
+}
+
+// Update invisibility powerup state
+function updateInvisibilityPowerup(deltaTime) {
+    const currentTime = Date.now();
+    
+    // Check if it's time to spawn a new powerup
+    if (!invisibilityPowerup.active && currentTime >= invisibilityPowerup.nextSpawnTime && gameState.status === GAME_STATE.PLAYING) {
+        spawnInvisibilityPowerup();
+    }
+    
+    // Update active powerup
+    if (invisibilityPowerup.active) {
+        // Update animation properties
+        invisibilityPowerup.rotation += invisibilityPowerup.rotationSpeed;
+        invisibilityPowerup.pulseSize += invisibilityPowerup.pulseDirection;
+        
+        // Increase scale for spawn animation
+        if (invisibilityPowerup.scale < 1) {
+            invisibilityPowerup.scale = Math.min(1, invisibilityPowerup.scale + deltaTime * 2);
+        }
+        
+        // Control pulse animation
+        if (invisibilityPowerup.pulseSize > 2) invisibilityPowerup.pulseDirection = -0.2;
+        if (invisibilityPowerup.pulseSize < 0) invisibilityPowerup.pulseDirection = 0.2;
+        
+        // Check if powerup should disappear
+        if (currentTime - invisibilityPowerup.spawnTime > INVISIBILITY_ACTIVE_DURATION) {
+            invisibilityPowerup.active = false;
+            invisibilityPowerup.nextSpawnTime = currentTime + getRandomSpawnInterval();
+        }
+        
+        // Check collision with players
+        if (isColliding(player1, invisibilityPowerup)) {
+            collectInvisibilityPowerup(player1);
+        } else if (isColliding(player2, invisibilityPowerup)) {
+            collectInvisibilityPowerup(player2);
+        }
+    }
+}
+
+// Collect invisibility powerup
+function collectInvisibilityPowerup(player) {
+    // Already collected or player is knocked back
+    if (!invisibilityPowerup.active || player.isKnockedBack) return;
+    
+    // Create collection effect
+    createBallEffect(invisibilityPowerup.x, invisibilityPowerup.y, 'white', 'collect');
+    
+    // Deactivate powerup
+    invisibilityPowerup.active = false;
+    invisibilityPowerup.nextSpawnTime = Date.now() + getRandomSpawnInterval();
+    
+    // Apply invisibility to player
+    player.isInvisible = true;
+    player.invisibleEndTime = Date.now() + INVISIBILITY_DURATION;
+    
+    // Create invisibility effect around player
+    createBallEffect(player.x, player.y, 'white', 'invisibility');
 }
 
 // Collect a ball if player is near one
@@ -234,6 +378,9 @@ function updateThrownBalls(deltaTime) {
     // Update ball effects
     updateBallEffects();
     
+    // Update invisibility powerup
+    updateInvisibilityPowerup(deltaTime);
+    
     // Update collectible balls
     for (let i = 0; i < balls.length; i++) {
         const ball = balls[i];
@@ -253,6 +400,23 @@ function updateThrownBalls(deltaTime) {
                 ball.spawnAnimation = 0;
             }
         }
+    }
+    
+    // Update player invisibility status
+    const currentTime = Date.now();
+    
+    // Check and update player1 invisibility
+    if (player1.isInvisible && currentTime >= player1.invisibleEndTime) {
+        player1.isInvisible = false;
+        // Create effect when invisibility ends
+        createBallEffect(player1.x, player1.y, 'white', 'invisibility');
+    }
+    
+    // Check and update player2 invisibility
+    if (player2.isInvisible && currentTime >= player2.invisibleEndTime) {
+        player2.isInvisible = false;
+        // Create effect when invisibility ends
+        createBallEffect(player2.x, player2.y, 'white', 'invisibility');
     }
     
     // Update thrown balls
@@ -324,7 +488,7 @@ function updateThrownBalls(deltaTime) {
         
         // Check for player collisions (only if ball is not owned by this player)
         // Check collision with player 1 (if ball was thrown by player 2)
-        if (ball.owner === 2 && !player1.isInvincible && isColliding(player1, ball)) {
+        if (ball.owner === 2 && !player1.isInvincible && !player1.isInvisible && isColliding(player1, ball)) {
             // Create a hit effect
             createBallEffect(ball.x, ball.y, ball.color, 'hit');
             
@@ -335,7 +499,7 @@ function updateThrownBalls(deltaTime) {
         }
         
         // Check collision with player 2 (if ball was thrown by player 1)
-        if (ball.owner === 1 && !player2.isInvincible && isColliding(player2, ball)) {
+        if (ball.owner === 1 && !player2.isInvincible && !player2.isInvisible && isColliding(player2, ball)) {
             // Create a hit effect
             createBallEffect(ball.x, ball.y, ball.color, 'hit');
             
@@ -376,6 +540,11 @@ function updateBallEffects() {
                 effect.radius += 1;
                 effect.alpha = 1 - (effect.lifeTime / effect.maxLifeTime);
                 break;
+                
+            case 'invisibility':
+                effect.radius += 2.5;
+                effect.alpha = 1 - (effect.lifeTime / effect.maxLifeTime);
+                break;
         }
         
         // Remove effect when lifetime is over
@@ -401,4 +570,8 @@ function resetBalls() {
         ball.scale = 1;
         ball.spawnAnimation = 0;
     });
+    
+    // Reset invisibility powerup
+    invisibilityPowerup.active = false;
+    invisibilityPowerup.nextSpawnTime = Date.now() + getRandomSpawnInterval();
 }
