@@ -47,7 +47,7 @@ function setupControls() {
         if (e.key === 'e') collectBall(player1);
         if (e.key === '/') collectBall(player2);
         
-        // Aiming controls
+        // Aiming controls (now just toggles aiming mode)
         if (e.key === 'q') player1.aiming = true;
         if (e.key === '.') player2.aiming = true;
     });
@@ -69,7 +69,7 @@ function setupControls() {
         if (e.key === 'ArrowLeft') player2.moveLeft = false;
         if (e.key === 'ArrowRight') player2.moveRight = false;
         
-        // Throwing controls
+        // Throwing controls - throw on key release
         if (e.key === 'q' && player1.aiming) {
             throwBall(player1);
             player1.aiming = false;

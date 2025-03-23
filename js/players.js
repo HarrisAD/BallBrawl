@@ -16,7 +16,6 @@ const player1 = {
     lastCollectTime: 0, // to prevent rapid collection
     aiming: false, // whether player is currently aiming
     aimAngle: 0, // angle of aim in radians
-    aimSpeed: Math.PI / 2, // rotation speed in radians per second
     health: MAX_HEALTH, // player health
     isKnockedBack: false, // whether player is currently knocked back
     knockbackTime: 0, // time remaining in knockback
@@ -44,7 +43,6 @@ const player2 = {
     lastCollectTime: 0, // to prevent rapid collection
     aiming: false, // whether player is currently aiming
     aimAngle: Math.PI, // angle of aim in radians (start aiming left)
-    aimSpeed: Math.PI / 2, // rotation speed in radians per second
     health: MAX_HEALTH, // player health
     isKnockedBack: false, // whether player is currently knocked back
     knockbackTime: 0, // time remaining in knockback
@@ -74,67 +72,81 @@ function updatePlayerPosition(player, deltaTime) {
             player.isKnockedBack = false;
         }
     } else {
-        // Calculate movement based on player speed and delta time
-        const moveDistance = player.speed * deltaTime;
-        
-        // Update position based on movement flags
-        if (player.moveUp) newY -= moveDistance;
-        if (player.moveDown) newY += moveDistance;
-        if (player.moveLeft) newX -= moveDistance;
-        if (player.moveRight) newX += moveDistance;
+        // If player is aiming, use movement controls to aim instead of move
+        if (player.aiming) {
+            // Update aim angle based on movement keys
+            if (player.moveUp) {
+                if (player.moveRight) {
+                    player.aimAngle = -Math.PI / 4; // Up-right (45 degrees)
+                } else if (player.moveLeft) {
+                    player.aimAngle = -3 * Math.PI / 4; // Up-left (135 degrees)
+                } else {
+                    player.aimAngle = -Math.PI / 2; // Up (90 degrees)
+                }
+            } else if (player.moveDown) {
+                if (player.moveRight) {
+                    player.aimAngle = Math.PI / 4; // Down-right (45 degrees)
+                } else if (player.moveLeft) {
+                    player.aimAngle = 3 * Math.PI / 4; // Down-left (135 degrees)
+                } else {
+                    player.aimAngle = Math.PI / 2; // Down (90 degrees)
+                }
+            } else if (player.moveRight) {
+                player.aimAngle = 0; // Right (0 degrees)
+            } else if (player.moveLeft) {
+                player.aimAngle = Math.PI; // Left (180 degrees)
+            }
+            // If no movement keys are pressed, aimAngle remains unchanged
+        } else {
+            // Normal movement (when not aiming)
+            // Calculate movement based on player speed and delta time
+            const moveDistance = player.speed * deltaTime;
+            
+            // Update position based on movement flags
+            if (player.moveUp) newY -= moveDistance;
+            if (player.moveDown) newY += moveDistance;
+            if (player.moveLeft) newX -= moveDistance;
+            if (player.moveRight) newX += moveDistance;
+        }
     }
     
-    // Apply boundary constraints
-    newX = Math.max(player.width / 2, Math.min(GAME_WIDTH - player.width / 2, newX));
-    newY = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, newY));
-    
-    // Check for obstacle collisions
-    const playerRect = {
-        x: newX - player.width / 2,
-        y: newY - player.height / 2,
-        width: player.width,
-        height: player.height
-    };
-    
-    let canMoveX = true;
-    let canMoveY = true;
-    
-    for (const obstacle of obstacles) {
-        // Check if moving in X direction would cause a collision
-        const xCollision = rectRectCollision(
-            {x: newX - player.width / 2, y: player.y - player.height / 2, width: player.width, height: player.height},
-            obstacle
-        );
+    // If not aiming, apply boundary constraints and obstacle collision
+    if (!player.aiming || player.isKnockedBack) {
+        // Apply boundary constraints
+        newX = Math.max(player.width / 2, Math.min(GAME_WIDTH - player.width / 2, newX));
+        newY = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, newY));
         
-        // Check if moving in Y direction would cause a collision
-        const yCollision = rectRectCollision(
-            {x: player.x - player.width / 2, y: newY - player.height / 2, width: player.width, height: player.height},
-            obstacle
-        );
+        // Check for obstacle collisions
+        const playerRect = {
+            x: newX - player.width / 2,
+            y: newY - player.height / 2,
+            width: player.width,
+            height: player.height
+        };
         
-        if (xCollision) canMoveX = false;
-        if (yCollision) canMoveY = false;
-    }
-    
-    // Apply movement based on collision checks
-    if (canMoveX) player.x = newX;
-    if (canMoveY) player.y = newY;
-}
-
-// Update aiming angles for players who are aiming
-function updateAimingAngles(deltaTime) {
-    // Rotate Player 1's aim angle counterclockwise when aiming
-    if (player1.aiming) {
-        player1.aimAngle -= player1.aimSpeed * deltaTime;
-        // Keep angle within 0 to 2π range
-        if (player1.aimAngle < 0) player1.aimAngle += Math.PI * 2;
-    }
-    
-    // Rotate Player 2's aim angle counterclockwise when aiming
-    if (player2.aiming) {
-        player2.aimAngle -= player2.aimSpeed * deltaTime;
-        // Keep angle within 0 to 2π range
-        if (player2.aimAngle < 0) player2.aimAngle += Math.PI * 2;
+        let canMoveX = true;
+        let canMoveY = true;
+        
+        for (const obstacle of obstacles) {
+            // Check if moving in X direction would cause a collision
+            const xCollision = rectRectCollision(
+                {x: newX - player.width / 2, y: player.y - player.height / 2, width: player.width, height: player.height},
+                obstacle
+            );
+            
+            // Check if moving in Y direction would cause a collision
+            const yCollision = rectRectCollision(
+                {x: player.x - player.width / 2, y: newY - player.height / 2, width: player.width, height: player.height},
+                obstacle
+            );
+            
+            if (xCollision) canMoveX = false;
+            if (yCollision) canMoveY = false;
+        }
+        
+        // Apply movement based on collision checks
+        if (canMoveX) player.x = newX;
+        if (canMoveY) player.y = newY;
     }
 }
 
@@ -193,6 +205,7 @@ function resetPlayers() {
     player1.isInvincible = false;
     player1.collectAnimation = 0;
     player1.throwAnimation = 0;
+    player1.aiming = false;
     
     // Reset player 2
     player2.x = 600;
@@ -203,4 +216,5 @@ function resetPlayers() {
     player2.isInvincible = false;
     player2.collectAnimation = 0;
     player2.throwAnimation = 0;
+    player2.aiming = false;
 }
