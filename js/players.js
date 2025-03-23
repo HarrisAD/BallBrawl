@@ -27,7 +27,35 @@ const player1 = {
     invisibleEndTime: 0, // when invisibility ends
     collectAnimation: 0, // frames of collect animation
     throwAnimation: 0, // frames of throw animation
-    lineOfSight: true // whether player has line of sight to opponent
+    lineOfSight: true, // whether player has line of sight to opponent
+    // These go in both player1 and player2 definitions
+    // Physics properties for momentum
+    velocityX: 0,
+    velocityY: 0,
+    acceleration: PLAYER_ACCELERATION,
+    friction: PLAYER_FRICTION,
+    maxSpeed: PLAYER_SPEED,
+
+    // Dash properties
+    isDashing: false,
+    dashDirection: { x: 0, y: 0 },
+    dashEndTime: 0,
+    lastDashTime: 0,
+
+    // Trail for movement
+    trail: [],
+    trailUpdateTimer: 0,
+
+    // Visual effect properties
+    lastParticleTime: 0,
+    visualEffects: {
+        glow: false,
+        glowColor: 'white',
+        glowIntensity: 0,
+        glowMaxIntensity: 1.0,
+        pulseSize: 0,
+        pulseDirection: 0.1
+    }
 };
 
 // Create player 2
@@ -57,18 +85,99 @@ const player2 = {
     invisibleEndTime: 0, // when invisibility ends
     collectAnimation: 0, // frames of collect animation
     throwAnimation: 0, // frames of throw animation
-    lineOfSight: true // whether player has line of sight to opponent
+    lineOfSight: true, // whether player has line of sight to opponent
+    // These go in both player1 and player2 definitions
+// Physics properties for momentum
+    velocityX: 0,
+    velocityY: 0,
+    acceleration: PLAYER_ACCELERATION,
+    friction: PLAYER_FRICTION,
+    maxSpeed: PLAYER_SPEED,
+
+    // Dash properties
+    isDashing: false,
+    dashDirection: { x: 0, y: 0 },
+    dashEndTime: 0,
+    lastDashTime: 0,
+
+    // Trail for movement
+    trail: [],
+    trailUpdateTimer: 0,
+
+    // Visual effect properties
+    lastParticleTime: 0,
+    visualEffects: {
+        glow: false,
+        glowColor: 'white',
+        glowIntensity: 0,
+        glowMaxIntensity: 1.0,
+        pulseSize: 0,
+        pulseDirection: 0.1
+    }
 };
 
-// Update player position based on movement flags
+// Update player position based on movement flags and momentum
 function updatePlayerPosition(player, deltaTime) {
-    let newX = player.x;
-    let newY = player.y;
+    const currentTime = Date.now();
     
+    // Update trail
+    player.trailUpdateTimer += deltaTime;
+    if (player.trailUpdateTimer > 0.05) { // Update every 50ms
+        player.trailUpdateTimer = 0;
+        
+        // Only add position to trail if moving significantly
+        const isMoving = Math.abs(player.velocityX) > 20 || Math.abs(player.velocityY) > 20;
+        
+        if (isMoving || player.isDashing) {
+            // Add current position to trail
+            player.trail.unshift({
+                x: player.x,
+                y: player.y,
+                alpha: player.isDashing ? 0.7 : 0.4,
+                width: player.isDashing ? 3 : 2
+            });
+            
+            // Limit trail length
+            if (player.trail.length > TRAIL_LENGTH) {
+                player.trail.pop();
+            }
+        } else if (player.trail.length > 0) {
+            // Fade out trail when not moving
+            for (const point of player.trail) {
+                point.alpha *= 0.8;
+            }
+            
+            // Remove fully faded points
+            player.trail = player.trail.filter(point => point.alpha > 0.05);
+        }
+    }
+    
+    // Handle dash
+    if (player.isDashing) {
+        // Check if dash should end
+        if (currentTime >= player.dashEndTime) {
+            player.isDashing = false;
+        } else {
+            // Apply dash movement
+            const dashSpeed = player.maxSpeed * DASH_SPEED;
+            player.x += player.dashDirection.x * dashSpeed * deltaTime;
+            player.y += player.dashDirection.y * dashSpeed * deltaTime;
+            
+            // Create occasional dash particles
+            if (Math.random() > 0.7) {
+                createParticleEffect(player.x, player.y, player.color, 'dash', 2);
+            }
+            
+            // Skip regular movement while dashing
+            return;
+        }
+    }
+    
+    // If player is knocked back, handle separately
     if (player.isKnockedBack) {
         // Update knockback physics
-        newX += player.knockbackVelocityX * deltaTime;
-        newY += player.knockbackVelocityY * deltaTime;
+        player.x += player.knockbackVelocityX * deltaTime;
+        player.y += player.knockbackVelocityY * deltaTime;
         
         // Reduce knockback time
         player.knockbackTime -= deltaTime;
@@ -76,30 +185,57 @@ function updatePlayerPosition(player, deltaTime) {
         // End knockback if time is up
         if (player.knockbackTime <= 0) {
             player.isKnockedBack = false;
+            
+            // Reset velocities when knockback ends
+            player.velocityX = 0;
+            player.velocityY = 0;
         }
-    } else {
-        // Calculate movement based on player speed and delta time
-        const moveDistance = player.speed * deltaTime;
-        
-        // Update position based on movement flags
-        if (player.moveUp) newY -= moveDistance;
-        if (player.moveDown) newY += moveDistance;
-        if (player.moveLeft) newX -= moveDistance;
-        if (player.moveRight) newX += moveDistance;
+        return;
     }
+    
+    // If player is aiming, don't apply movement
+    if (player.aiming) return;
+    
+    // Calculate acceleration based on input
+    let accelerationX = 0;
+    let accelerationY = 0;
+    
+    if (player.moveUp) accelerationY = -player.acceleration;
+    if (player.moveDown) accelerationY = player.acceleration;
+    if (player.moveLeft) accelerationX = -player.acceleration;
+    if (player.moveRight) accelerationX = player.acceleration;
+    
+    // Apply acceleration to velocity
+    player.velocityX += accelerationX * deltaTime;
+    player.velocityY += accelerationY * deltaTime;
+    
+    // If no movement input, apply friction to slow down
+    if (!player.moveUp && !player.moveDown && !player.moveLeft && !player.moveRight) {
+        player.velocityX *= player.friction;
+        player.velocityY *= player.friction;
+        
+        // Stop completely if velocity is very small
+        if (Math.abs(player.velocityX) < 0.1) player.velocityX = 0;
+        if (Math.abs(player.velocityY) < 0.1) player.velocityY = 0;
+    }
+    
+    // Apply speed limit
+    const speed = Math.sqrt(player.velocityX * player.velocityX + player.velocityY * player.velocityY);
+    if (speed > player.maxSpeed) {
+        const ratio = player.maxSpeed / speed;
+        player.velocityX *= ratio;
+        player.velocityY *= ratio;
+    }
+    
+    // Calculate new position based on velocity
+    let newX = player.x + player.velocityX * deltaTime;
+    let newY = player.y + player.velocityY * deltaTime;
     
     // Apply boundary constraints
     newX = Math.max(player.width / 2, Math.min(GAME_WIDTH - player.width / 2, newX));
     newY = Math.max(player.height / 2, Math.min(GAME_HEIGHT - player.height / 2, newY));
     
     // Check for obstacle collisions
-    const playerRect = {
-        x: newX - player.width / 2,
-        y: newY - player.height / 2,
-        width: player.width,
-        height: player.height
-    };
-    
     let canMoveX = true;
     let canMoveY = true;
     
@@ -116,13 +252,41 @@ function updatePlayerPosition(player, deltaTime) {
             obstacle
         );
         
-        if (xCollision) canMoveX = false;
-        if (yCollision) canMoveY = false;
+        if (xCollision) {
+            canMoveX = false;
+            // Bounce off obstacles with reduced velocity
+            player.velocityX = -player.velocityX * 0.3;
+        }
+        
+        if (yCollision) {
+            canMoveY = false;
+            // Bounce off obstacles with reduced velocity
+            player.velocityY = -player.velocityY * 0.3;
+        }
     }
     
     // Apply movement based on collision checks
     if (canMoveX) player.x = newX;
     if (canMoveY) player.y = newY;
+    
+    // Attract nearby balls when close for better pickup experience
+    for (const ball of balls) {
+        if (!ball.active) continue;
+        
+        const dx = player.x - ball.x;
+        const dy = player.y - ball.y;
+        const distSquared = dx * dx + dy * dy;
+        
+        if (distSquared < PICKUP_ATTRACTION_RANGE * PICKUP_ATTRACTION_RANGE) {
+            // Calculate attraction strength (stronger when closer)
+            const dist = Math.sqrt(distSquared);
+            const strength = Math.max(0, 1 - dist / PICKUP_ATTRACTION_RANGE) * 0.1;
+            
+            // Move ball slightly toward player for easier pickup
+            ball.x += dx * strength;
+            ball.y += dy * strength;
+        }
+    }
 }
 
 // Auto-aim at the opponent
@@ -239,8 +403,22 @@ function applyKnockback(player, ball) {
     // Reduce health
     player.health--;
     
+    // Trigger screen shake effect - intensity based on remaining health
+    const shakeIntensity = 10 - (player.health * 2); // More intense at lower health
+    triggerScreenShake(shakeIntensity, 300); // 300ms of shake
+    
+    // Add screen flash effect
+    const flashColor = player === player1 ? 'rgba(255,0,0,0.2)' : 'rgba(0,0,255,0.2)';
+    addScreenFlash(flashColor, 200); // Flash for 200ms
+    
+    // Add hit stop effect (brief pause on impact)
+    setTimeScale(0.1, 100); // Slow to 10% for 100ms
+    
     // Check if player is defeated
     if (player.health <= 0) {
+        // Extra intense shake on defeat
+        triggerScreenShake(15, 500);
+        
         // End the round with the other player as winner
         endRound(player === player1 ? 2 : 1);
     }

@@ -2,6 +2,21 @@
 
 // Render game objects
 function render() {
+    // Clear the canvas
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Apply camera transformation
+    ctx.save();
+    
+    // Calculate camera offset to center view (uncomment if using camera)
+    // const offsetX = GAME_WIDTH/2 - camera.x;
+    // const offsetY = GAME_HEIGHT/2 - camera.y;
+    
+    // Apply camera transform with shake effect
+    if (camera.shake.active) {
+        ctx.translate(camera.shake.offsetX, camera.shake.offsetY);
+    }
+    
     // Draw obstacles (first, so they're behind other objects)
     drawObstacles();
     
@@ -14,6 +29,9 @@ function render() {
     // Draw thrown balls
     drawThrownBalls();
     
+    // Draw particles
+    drawParticles();
+    
     // Draw players
     drawPlayer(player1);
     drawPlayer(player2);
@@ -24,17 +42,17 @@ function render() {
         if (player2.aiming) drawAimLine(player2);
     }
     
-    // Draw game info
+    // Restore context
+    ctx.restore();
+    
+    // Draw UI elements (these don't get affected by camera shake)
     drawGameInfo();
-    
-    // Draw health bars
     drawHealthBars();
-    
-    // Draw score board
     drawScoreboard();
-    
-    // Draw round timer
     drawRoundTimer();
+    
+    // Draw screen effects
+    renderScreenEffects();
     
     // Draw state-specific overlays
     switch (gameState.status) {
@@ -481,6 +499,7 @@ function drawAimLine(player) {
 // Draw a player
 function drawPlayer(player) {
     // Skip rendering if player is invisible (except for the player themselves who gets a ghost effect)
+    drawPlayerTrail(player);
     const isInvisibleEnemy = player.isInvisible;
     
     // Create shadow effect (only if not invisible)
@@ -1014,4 +1033,172 @@ function drawGameInfo() {
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.textAlign = 'right';
     ctx.fillText(`Phase 11: Polish - Invisibility Powerup`, GAME_WIDTH - 10, 60);
+}
+
+// Screen flash effect
+let activeFlash = null;
+
+function addScreenFlash(color, duration) {
+    activeFlash = {
+        color: color,
+        duration: duration,
+        startTime: Date.now()
+    };
+}
+
+function renderScreenEffects() {
+    // Render screen flash
+    if (activeFlash) {
+        const currentTime = Date.now();
+        const elapsed = currentTime - activeFlash.startTime;
+        
+        if (elapsed < activeFlash.duration) {
+            // Calculate alpha based on time elapsed
+            const alpha = 1 - (elapsed / activeFlash.duration);
+            
+            // Draw flash overlay
+            ctx.fillStyle = activeFlash.color;
+            ctx.globalAlpha = alpha;
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            ctx.globalAlpha = 1.0;
+        } else {
+            activeFlash = null;
+        }
+    }
+}
+
+// Draw player trail
+function drawPlayerTrail(player) {
+    if (player.trail.length === 0) return;
+    
+    // Draw trail segments
+    for (let i = 0; i < player.trail.length; i++) {
+        const point = player.trail[i];
+        const nextPoint = player.trail[i + 1];
+        
+        // Skip points with no alpha
+        if (point.alpha <= 0) continue;
+        
+        if (nextPoint) {
+            // Draw line between points
+            ctx.strokeStyle = player.color;
+            ctx.lineWidth = point.width || 2;
+            ctx.globalAlpha = point.alpha;
+            
+            ctx.beginPath();
+            ctx.moveTo(point.x, point.y);
+            ctx.lineTo(nextPoint.x, nextPoint.y);
+            ctx.stroke();
+        } else {
+            // Draw last point as a circle
+            ctx.fillStyle = player.color;
+            ctx.globalAlpha = point.alpha;
+            
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, (point.width || 2) / 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
+}
+
+// Draw particles
+function drawParticles() {
+    // Sort particles by type (drawing throw particles first, then collect, then hit)
+    const sortOrder = { 'throw': 0, 'collect': 1, 'hit': 2, 'powerup': 3 };
+    particles.sort((a, b) => sortOrder[a.type] - sortOrder[b.type]);
+    
+    for (const particle of particles) {
+        ctx.globalAlpha = particle.alpha;
+        ctx.fillStyle = particle.color;
+        
+        // Draw based on type
+        switch (particle.type) {
+            case 'hit':
+                // Draw as circle
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'collect':
+                // Draw as smaller circle with trail
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add small trail line
+                const dx = particle.targetX - particle.x;
+                const dy = particle.targetY - particle.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 5) {
+                    const trailLength = Math.min(dist, 8);
+                    const angle = Math.atan2(dy, dx);
+                    
+                    ctx.strokeStyle = particle.color;
+                    ctx.lineWidth = particle.radius / 2;
+                    ctx.beginPath();
+                    ctx.moveTo(particle.x, particle.y);
+                    ctx.lineTo(
+                        particle.x - Math.cos(angle) * trailLength,
+                        particle.y - Math.sin(angle) * trailLength
+                    );
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'throw':
+                // Simple small dots
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'powerup':
+                // Sparkle effect
+                if (Math.random() > 0.5) {
+                    // Sometimes draw star shape
+                    const size = particle.radius * 2;
+                    drawStar(particle.x, particle.y, 4, size, size / 2);
+                } else {
+                    // Sometimes draw circle
+                    ctx.beginPath();
+                    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                break;
+                
+            case 'dash':
+                // Dash trail particles
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+        }
+    }
+    
+    // Reset alpha
+    ctx.globalAlpha = 1.0;
+}
+
+// Helper function to draw a star shape
+function drawStar(x, y, points, outerRadius, innerRadius) {
+    let step = Math.PI / points;
+    
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+        let radius = i % 2 === 0 ? outerRadius : innerRadius;
+        let angle = i * step;
+        
+        if (i === 0) {
+            ctx.moveTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+        } else {
+            ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+        }
+    }
+    ctx.closePath();
+    ctx.fill();
 }

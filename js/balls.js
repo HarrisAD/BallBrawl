@@ -4,6 +4,8 @@
 const balls = [];
 const thrownBalls = [];
 const ballEffects = []; // For visual effects like flashes
+// Particle system for visual effects
+const particles = [];
 
 // Invisibility powerup
 let invisibilityPowerup = {
@@ -221,6 +223,9 @@ function collectInvisibilityPowerup(player) {
     // Create collection effect
     createBallEffect(invisibilityPowerup.x, invisibilityPowerup.y, 'white', 'collect');
     
+    // Create fancy particle effect
+    createParticleEffect(invisibilityPowerup.x, invisibilityPowerup.y, 'white', 'powerup', 30);
+    
     // Deactivate powerup
     invisibilityPowerup.active = false;
     invisibilityPowerup.nextSpawnTime = Date.now() + getRandomSpawnInterval();
@@ -231,6 +236,7 @@ function collectInvisibilityPowerup(player) {
     
     // Create invisibility effect around player
     createBallEffect(player.x, player.y, 'white', 'invisibility');
+    createParticleEffect(player.x, player.y, 'white', 'powerup', 20);
 }
 
 // Collect a ball if player is near one
@@ -256,7 +262,10 @@ function collectBall(player) {
         
         // Check if player is colliding with the ball
         if (isColliding(player, ball)) {
-            // Create a collection effect
+            // Create collection particle effect
+            createParticleEffect(ball.x, ball.y, ball.color, 'collect', 20);
+            
+            // Create a collection effect (original)
             createBallEffect(ball.x, ball.y, ball.color, 'collect');
             
             // Collect the ball
@@ -280,6 +289,7 @@ function collectBall(player) {
     }
 }
 
+// Throw a ball in the direction the player is aiming
 // Throw a ball in the direction the player is aiming
 function throwBall(player) {
     // Don't throw when knocked back
@@ -312,8 +322,18 @@ function throwBall(player) {
         vy: vy,
         owner: player === player1 ? 1 : 2, // Track which player threw the ball
         trail: [], // For trail effect
-        trailTimer: 0 // Timer for adding trail points
+        trailTimer: 0, // Timer for adding trail points
+        hasParticles: true // Flag to track if we're generating particles for this ball
     };
+    
+    // Create throw particle effect at the player position
+    createParticleEffect(
+        player.x + Math.cos(player.aimAngle) * (player.width / 2), 
+        player.y + Math.sin(player.aimAngle) * (player.height / 2), 
+        thrownBall.color, 
+        'throw',
+        10
+    );
     
     // Add the ball to the thrown balls array
     thrownBalls.push(thrownBall);
@@ -575,3 +595,182 @@ function resetBalls() {
     invisibilityPowerup.active = false;
     invisibilityPowerup.nextSpawnTime = Date.now() + getRandomSpawnInterval();
 }
+
+// Create particle effect
+function createParticleEffect(x, y, color, type, count = 15) {
+    for (let i = 0; i < count; i++) {
+        let particle;
+        
+        switch (type) {
+            case 'hit':
+                // Explosion particles
+                particle = {
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 200, // random velocity
+                    vy: (Math.random() - 0.5) * 200,
+                    radius: 2 + Math.random() * 3,
+                    color: color,
+                    alpha: 1.0,
+                    lifeTime: 0,
+                    maxLifeTime: 30 + Math.random() * 20, // frames of animation
+                    gravity: 40 + Math.random() * 20,
+                    type: type
+                };
+                break;
+                
+            case 'collect':
+                // Collection particles (spiral inward)
+                const angle = (Math.random() * Math.PI * 2);
+                const distance = 30 + Math.random() * 20;
+                particle = {
+                    x: x + Math.cos(angle) * distance,
+                    y: y + Math.sin(angle) * distance,
+                    targetX: x,
+                    targetY: y,
+                    radius: 1 + Math.random() * 2,
+                    color: color,
+                    alpha: 1.0,
+                    lifeTime: 0,
+                    maxLifeTime: 20 + Math.random() * 10,
+                    type: type
+                };
+                break;
+                
+            case 'throw':
+                // Throw particles (follow behind the thrown ball)
+                const spread = 5;
+                particle = {
+                    x: x + (Math.random() - 0.5) * spread,
+                    y: y + (Math.random() - 0.5) * spread,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: (Math.random() - 0.5) * 20,
+                    radius: 1 + Math.random() * 2,
+                    color: color,
+                    alpha: 0.7,
+                    lifeTime: 0,
+                    maxLifeTime: 10 + Math.random() * 5,
+                    type: type
+                };
+                break;
+                
+            case 'powerup':
+                // Sparkle particles for powerup
+                const sparkleAngle = (Math.random() * Math.PI * 2);
+                const sparkleDistance = 10 + Math.random() * 15;
+                particle = {
+                    x: x + Math.cos(sparkleAngle) * sparkleDistance,
+                    y: y + Math.sin(sparkleAngle) * sparkleDistance,
+                    vx: Math.cos(sparkleAngle) * 10,
+                    vy: Math.sin(sparkleAngle) * 10,
+                    radius: 1 + Math.random(),
+                    // Rainbow colors
+                    color: `hsl(${Math.random() * 360}, 100%, 70%)`,
+                    alpha: 0.9,
+                    lifeTime: 0,
+                    maxLifeTime: 20 + Math.random() * 10,
+                    gravity: -10, // Float upward
+                    type: type
+                };
+                break;
+                
+            case 'dash':
+                // Dash particles (opposite to movement direction)
+                const dashAngle = Math.atan2(
+                    -player.dashDirection.y, 
+                    -player.dashDirection.x
+                );
+                
+                particle = {
+                    x: x + (Math.random() - 0.5) * 10,
+                    y: y + (Math.random() - 0.5) * 10,
+                    vx: Math.cos(dashAngle) * (80 + Math.random() * 40),
+                    vy: Math.sin(dashAngle) * (80 + Math.random() * 40),
+                    radius: 1 + Math.random() * 3,
+                    color: color,
+                    alpha: 0.8,
+                    lifeTime: 0,
+                    maxLifeTime: 20 + Math.random() * 10,
+                    type: type
+                };
+                break;
+        }
+        
+        particles.push(particle);
+    }
+}
+
+// Update particles
+function updateParticles(deltaTime) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const particle = particles[i];
+        
+        // Update lifetime
+        particle.lifeTime += 1;
+        
+        // Update alpha
+        particle.alpha = 1 - (particle.lifeTime / particle.maxLifeTime);
+        
+        // Update based on type
+        switch (particle.type) {
+            case 'hit':
+                // Apply velocity and gravity
+                particle.x += particle.vx * deltaTime;
+                particle.y += particle.vy * deltaTime;
+                particle.vy += particle.gravity * deltaTime; // Add gravity effect
+                
+                // Slow down over time
+                particle.vx *= 0.95;
+                particle.vy *= 0.95;
+                break;
+                
+            case 'collect':
+                // Move toward target (spiral effect)
+                const dx = particle.targetX - particle.x;
+                const dy = particle.targetY - particle.y;
+                const progress = particle.lifeTime / particle.maxLifeTime;
+                
+                // Speed up as it gets closer
+                const speed = 0.1 + progress * 0.3;
+                
+                particle.x += dx * speed;
+                particle.y += dy * speed;
+                break;
+                
+            case 'throw':
+                // Simple fade out
+                particle.x += particle.vx * deltaTime;
+                particle.y += particle.vy * deltaTime;
+                break;
+                
+                case 'powerup':
+                    // Float upward with slight movement
+                    particle.x += particle.vx * deltaTime;
+                    particle.y += particle.vy * deltaTime;
+                    
+                    if (particle.gravity) {
+                        particle.vy += particle.gravity * deltaTime;
+                    }
+                    
+                    // Slow down
+                    particle.vx *= 0.98;
+                    particle.vy *= 0.98;
+                    break;
+                    
+                case 'dash':
+                    // Update dash particles
+                    particle.x += particle.vx * deltaTime;
+                    particle.y += particle.vy * deltaTime;
+                    
+                    // Slow down over time
+                    particle.vx *= 0.9;
+                    particle.vy *= 0.9;
+                    break;
+                }
+                
+                // Remove if lifetime is over
+                if (particle.lifeTime >= particle.maxLifeTime) {
+                    particles.splice(i, 1);
+                }
+            }
+        }   

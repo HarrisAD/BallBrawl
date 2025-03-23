@@ -17,7 +17,37 @@ const gameState = {
     timePaused: 0
 };
 
-// Main game loop
+// Screen shake effect variables
+const screenShake = {
+    active: false,
+    intensity: 0,
+    duration: 0,
+    startTime: 0,
+    offsetX: 0,
+    offsetY: 0
+};
+
+// Camera smoothing
+const camera = {
+    x: 0,
+    y: 0,
+    targetX: 0,
+    targetY: 0,
+    smoothSpeed: 0.1, // Adjustment speed (0-1)
+    shake: {
+        active: false,
+        intensity: 0,
+        duration: 0,
+        startTime: 0,
+        offsetX: 0,
+        offsetY: 0
+    }
+};
+
+// Time scaling for hit-stop effect
+let timeScale = 1.0;
+let timeScaleResetTime = 0;
+
 function gameLoop(timestamp) {
     // Calculate delta time (time since last frame)
     let deltaTime = 0;
@@ -34,36 +64,102 @@ function gameLoop(timestamp) {
     
     gameState.lastTime = timestamp;
     
+    // Apply time scaling to delta time
+    const currentTimeScale = updateTimeScale();
+    deltaTime = deltaTime * currentTimeScale;
+    
     // Convert to seconds for easier calculation
     const deltaSeconds = deltaTime / 1000;
     
-    // Clear the canvas
-    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    // Rest of the function remains the same
+    // ...
+}
+
+// Trigger screen shake effect
+function triggerScreenShake(intensity, duration) {
+    camera.shake.active = true;
+    camera.shake.intensity = intensity;
+    camera.shake.duration = duration;
+    camera.shake.startTime = Date.now();
+}
+
+// Update screen shake effect
+function updateScreenShake() {
+    if (!screenShake.active) return;
     
-    // Update game logic based on current state
-    switch (gameState.status) {
-        case GAME_STATE.PLAYING:
-            updateRoundTimer(deltaSeconds);
-            update(deltaSeconds);
-            break;
-            
-        case GAME_STATE.PAUSED:
-        case GAME_STATE.START:
-        case GAME_STATE.ROUND_OVER:
-        case GAME_STATE.MATCH_OVER:
-            // No updates in these states
-            break;
+    const currentTime = Date.now();
+    const elapsedTime = currentTime - screenShake.startTime;
+    
+    // Check if shake duration has elapsed
+    if (elapsedTime >= screenShake.duration) {
+        screenShake.active = false;
+        screenShake.offsetX = 0;
+        screenShake.offsetY = 0;
+        return;
     }
     
-    // Render game objects
-    render();
+    // Calculate remaining intensity based on elapsed time
+    const remainingIntensity = screenShake.intensity * (1 - elapsedTime / screenShake.duration);
     
-    // Continue the game loop
-    requestAnimationFrame(gameLoop);
+    // Update shake offsets with random values
+    screenShake.offsetX = (Math.random() * 2 - 1) * remainingIntensity;
+    screenShake.offsetY = (Math.random() * 2 - 1) * remainingIntensity;
+}
+
+// Update camera position
+function updateCamera(deltaTime) {
+    // Camera follows the centroid of both players
+    camera.targetX = (player1.x + player2.x) / 2;
+    camera.targetY = (player1.y + player2.y) / 2;
+    
+    // Smooth camera movement
+    camera.x += (camera.targetX - camera.x) * camera.smoothSpeed;
+    camera.y += (camera.targetY - camera.y) * camera.smoothSpeed;
+    
+    // Update camera shake
+    if (camera.shake.active) {
+        const currentTime = Date.now();
+        const elapsedTime = currentTime - camera.shake.startTime;
+        
+        // Check if shake duration has elapsed
+        if (elapsedTime >= camera.shake.duration) {
+            camera.shake.active = false;
+            camera.shake.offsetX = 0;
+            camera.shake.offsetY = 0;
+            return;
+        }
+        
+        // Calculate remaining intensity based on elapsed time
+        const remainingIntensity = camera.shake.intensity * (1 - elapsedTime / camera.shake.duration);
+        
+        // Update shake offsets with random values
+        camera.shake.offsetX = (Math.random() * 2 - 1) * remainingIntensity;
+        camera.shake.offsetY = (Math.random() * 2 - 1) * remainingIntensity;
+    }
+}
+
+// Set time scale for hit-stop effects
+function setTimeScale(scale, duration) {
+    timeScale = scale;
+    timeScaleResetTime = Date.now() + duration;
+}
+
+// Update time scale
+function updateTimeScale() {
+    if (timeScale !== 1.0 && Date.now() >= timeScaleResetTime) {
+        timeScale = 1.0;
+    }
+    return timeScale;
 }
 
 // Update game logic
 function update(deltaTime) {
+    // Update camera
+    updateCamera(deltaTime);
+    
+    // Update screen shake effect
+    updateScreenShake();
+    
     // Update player 1 position
     updatePlayerPosition(player1, deltaTime);
     
