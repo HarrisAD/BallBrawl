@@ -71,8 +71,23 @@ function gameLoop(timestamp) {
     // Convert to seconds for easier calculation
     const deltaSeconds = deltaTime / 1000;
     
-    // Rest of the function remains the same
-    // ...
+    // Only update if the game is playing
+    if (gameState.status === GAME_STATE.PLAYING) {
+        // Update game logic
+        update(deltaSeconds);
+        
+        // Update particles
+        updateParticles(deltaSeconds);
+        
+        // Update round timer
+        updateRoundTimer(deltaSeconds);
+    }
+    
+    // Render the game
+    render();
+    
+    // Request next frame
+    requestAnimationFrame(gameLoop);
 }
 
 // Trigger screen shake effect
